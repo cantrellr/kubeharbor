@@ -1,0 +1,58 @@
+# Rendered by scripts/04-render-harbor-yml.sh.
+# Keep this file as the golden template; /opt/harbor/harbor.yml is generated from it.
+
+hostname: __HARBOR_HOSTNAME__
+
+http:
+  port: __HARBOR_HTTP_PORT__
+
+https:
+  port: __HARBOR_HTTPS_PORT__
+  certificate: __HARBOR_CERT_DEST__
+  private_key: __HARBOR_KEY_DEST__
+
+harbor_admin_password: __HARBOR_ADMIN_PASSWORD__
+
+database:
+  password: __HARBOR_DB_PASSWORD__
+  max_idle_conns: 100
+  max_open_conns: 900
+
+data_volume: __HARBOR_DATA_VOLUME__
+
+trivy:
+  ignore_unfixed: false
+  skip_update: true
+  offline_scan: true
+  security_check: vuln
+  insecure: false
+
+jobservice:
+  max_job_workers: 10
+
+notification:
+  webhook_job_max_retry: 10
+
+chart:
+  absolute_url: disabled
+
+log:
+  level: info
+  local:
+    rotate_count: 50
+    rotate_size: 200M
+    location: __HARBOR_LOG_DIR__
+
+proxy:
+  http_proxy:
+  https_proxy:
+  no_proxy:
+  components:
+
+upload_purging:
+  enabled: true
+  age: 168h
+  interval: 24h
+  dryrun: false
+
+_version: __HARBOR_CONFIG_VERSION__

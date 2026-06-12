@@ -1,0 +1,37 @@
+kubeharbor Docker air-gap bundle manifest
+
+Included:
+- install.sh
+- config/harbor.env
+- config/harbor.yml.template
+- certs/README.md
+- installers/README.md
+- packages/docker-debs/README.md
+- images/README.md
+- scripts/00-prepare-data-disk.sh
+- scripts/01-preflight.sh
+- scripts/02-install-docker-offline.sh
+- scripts/03-load-extra-images.sh
+- scripts/04-stage-harbor-offline-installer.sh
+- scripts/05-render-harbor-yml.sh
+- scripts/06-install-harbor.sh
+- scripts/07-optional-use-dhi-portal.sh
+- scripts/08-install-client-docker-ca.sh
+- scripts/09-backup-harbor.sh
+- scripts/10-verify.sh
+- systemd/harbor.service
+- tools/download-airgap-artifacts-on-internet-host.sh
+- tools/create-leaf-cert-with-local-ca.sh
+- docs/README.md
+- docs/hardening-checklist.md
+- docs/operator-runbook.md
+
+Downloaded later by staging script:
+- Harbor offline installer tarball
+- Docker Engine and dependency .deb packages
+- DHI Harbor portal image tar archive
+
+Not included by design:
+- Production TLS certificate/private key
+- CA private key
+- Docker credentials

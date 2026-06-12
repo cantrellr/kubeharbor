@@ -1,0 +1,8 @@
+Bundle: kubeharbor Docker air-gap deployment bundle
+Generated: 2026-06-12
+Target OS: Ubuntu 24.04 LTS
+Target host: kubeharbor.dev.kube
+Target VM: 4 vCPU, 16 GB RAM, 64 GB OS disk, 500 GB /data disk
+Harbor target: v2.15.1 offline installer
+Extra DHI image: cantrellcloud/dhi-harbor-portal:2.15.1-debian-dev
+Container runtime: Docker Engine + Docker Compose plugin
