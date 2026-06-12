@@ -1,8 +1,6 @@
-Bundle: kubeharbor Docker air-gap deployment bundle
-Generated: 2026-06-12
-Target OS: Ubuntu 24.04 LTS
-Target host: kubeharbor.dev.kube
-Target VM: 4 vCPU, 16 GB RAM, 64 GB OS disk, 500 GB /data disk
-Harbor target: v2.15.1 offline installer
-Extra DHI image: cantrellcloud/dhi-harbor-portal:2.15.1-debian-dev
-Container runtime: Docker Engine + Docker Compose plugin
+kubeharbor-docker-airgap-bundle-v4
+Generated for Ubuntu 24.04 LTS + Docker Engine + Harbor v2.15.1
+Updates from v3:
+- Adds tools/clean-airgap-downloads.sh for clean-slate staging reruns.
+- Purges downloaded Docker .debs, Harbor offline installers/sidecars, saved image tarballs, generated checksums, output tarballs, ARTIFACTS.txt, and temporary staging directories.
+- Optional flags can purge local Docker image cache, old Docker auth files, and staged cert material when intentionally requested.

@@ -110,3 +110,22 @@ sudo docker login kubeharbor.dev.kube
 ```
 
 For RKE2/containerd nodes, configure trust in the RKE2/containerd registry configuration instead of Docker's `/etc/docker/certs.d` path.
+## Reset downloaded artifacts / clean slate
+
+Run this on the Internet-connected staging host when you want to purge previously downloaded artifacts and rebuild the air-gap tarball from scratch.
+
+```bash
+sudo ./tools/clean-airgap-downloads.sh --dry-run
+sudo ./tools/clean-airgap-downloads.sh --yes
+```
+
+Default cleanup removes generated/downloaded bundle content only: Docker `.deb` files, Harbor offline installer files, saved Docker image tars, generated checksums, `ARTIFACTS.txt`, output tarballs, and known `/tmp/kubeharbor-*` scratch directories. It does not remove your cert files, installed Docker packages, deployed Harbor runtime, or local Docker image cache unless you explicitly request that.
+
+For a full staging-host cleanup after an older run that may have saved Docker credentials under `/root/.docker/config.json`:
+
+```bash
+sudo ./tools/clean-airgap-downloads.sh --yes --purge-docker-images --purge-docker-auth
+```
+
+Use `--purge-certs` only when you intentionally want to delete files staged under `certs/`.
+

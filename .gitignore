@@ -1,5 +1,48 @@
-output/
-images/
-installers/
-packages/
+# -------------------------------------------------------------------
+# kubeharbor air-gap bundle ignores
+# -------------------------------------------------------------------
+
+# Docker offline packages
+packages/docker-debs/*
+!packages/docker-debs/README.md
+
+# Harbor offline installers
+installers/*
+!installers/README.md
+
+# Saved container images
+images/*
+!images/README.md
+
+# TLS/private key material
+certs/*
+!certs/README.md
+
+# Generated moveable air-gap bundles
+output/*
+
+# Generated artifact manifests/checksums
 ARTIFACTS.txt
+SHA256SUMS
+*.sha256
+*.tgz
+*.tar
+*.tar.gz
+*.tar.zst
+*.inspect.json
+
+# Harbor extracted/runtime files if someone stages in repo root
+harbor/
+common/
+docker-compose.yml
+harbor.yml
+prepare
+install.sh.bak
+
+# Local/editor junk
+.DS_Store
+Thumbs.db
+*.swp
+*.tmp
+.vscode/
+.idea/

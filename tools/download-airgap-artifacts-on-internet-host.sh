@@ -19,17 +19,19 @@ if [[ $EUID -ne 0 ]]; then
   exit 1
 fi
 
-need_cmd() { command -v "$1" >/dev/null 2>&1 || { echo "ERROR: missing command: $1" >&2; exit 1; }; }
+log() { echo "==> $*"; }
+warn() { echo "WARN: $*" >&2; }
+err() { echo "ERROR: $*" >&2; exit 1; }
+need_cmd() { command -v "$1" >/dev/null 2>&1 || err "missing command: $1"; }
 
 mkdir -p "${BUNDLE_DIR}/packages/docker-debs" "${BUNDLE_DIR}/installers" "${BUNDLE_DIR}/images" "${OUTPUT_DIR}"
 
 . /etc/os-release
 if [[ "${ID}" != "ubuntu" ]]; then
-  echo "WARN: staging host is ${PRETTY_NAME}; target package set is intended for Ubuntu 24.04." >&2
+  warn "staging host is ${PRETTY_NAME}; target package set is intended for Ubuntu 24.04."
 fi
 if [[ "$(dpkg --print-architecture)" != "amd64" ]]; then
-  echo "ERROR: this script currently expects amd64/x86_64, matching the kubeharbor VM." >&2
-  exit 1
+  err "this script currently expects amd64/x86_64, matching the kubeharbor VM."
 fi
 
 apt-get update
@@ -42,9 +44,10 @@ echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.
 apt-get update
 
 if [[ "${DOWNLOAD_DOCKER_DEBS}" == "true" ]]; then
-  echo "==> Downloading Docker Engine packages and dependency .debs for offline install"
+  log "Downloading Docker Engine packages and dependency .debs for offline install"
   rm -rf /tmp/kubeharbor-docker-debs
   mkdir -p /tmp/kubeharbor-docker-debs
+  chmod 0777 /tmp/kubeharbor-docker-debs
   pushd /tmp/kubeharbor-docker-debs >/dev/null
 
   core_packages=(docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin)
@@ -57,18 +60,19 @@ if [[ "${DOWNLOAD_DOCKER_DEBS}" == "true" ]]; then
   printf '%s\n' "${all_packages[@]}" > DOCKER_PACKAGE_LIST.txt
 
   for pkg in "${all_packages[@]}"; do
-    apt-get download "$pkg" || echo "WARN: could not download package ${pkg}; it may be virtual or architecture-specific." >&2
+    apt-get download "$pkg" || warn "could not download package ${pkg}; it may be virtual or architecture-specific."
   done
 
   cp -v ./*.deb "${BUNDLE_DIR}/packages/docker-debs/"
   cp -v DOCKER_PACKAGE_LIST.txt "${BUNDLE_DIR}/packages/docker-debs/"
   popd >/dev/null
+  rm -rf /tmp/kubeharbor-docker-debs
 fi
 
 # Ensure the staging host can pull/save images. Installing Docker here is okay because this is the Internet-connected staging host.
 if [[ "${DOWNLOAD_DHI_IMAGE}" == "true" ]]; then
   if ! command -v docker >/dev/null 2>&1; then
-    echo "==> Installing Docker on staging host so the DHI image can be pulled and saved"
+    log "Installing Docker on staging host so the DHI image can be pulled and saved"
     apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
     systemctl enable --now docker
   else
@@ -76,15 +80,39 @@ if [[ "${DOWNLOAD_DHI_IMAGE}" == "true" ]]; then
   fi
 fi
 
+download_if_exists() {
+  local url="$1"
+  local dest="$2"
+  local label="$3"
+
+  # GitHub release sidecar artifact names changed across Harbor releases. Probe first so missing optional
+  # signatures/checksums do not print a scary curl 404 during an otherwise-successful bundle build.
+  local http_code
+  http_code="$(curl -fsSIL -o /dev/null -w '%{http_code}' "$url" 2>/dev/null || true)"
+  if [[ "$http_code" == "200" || "$http_code" == "302" ]]; then
+    log "Downloading ${label}"
+    curl -fL "$url" -o "$dest"
+    return 0
+  fi
+  warn "Optional ${label} not found at release URL; continuing without it. URL=${url} HTTP=${http_code:-unreachable}"
+  return 1
+}
+
 if [[ "${DOWNLOAD_HARBOR}" == "true" ]]; then
-  echo "==> Downloading Harbor offline installer ${HARBOR_VERSION}"
+  log "Downloading Harbor offline installer ${HARBOR_VERSION}"
   harbor_file="harbor-offline-installer-${HARBOR_VERSION}.tgz"
-  curl -fL "https://github.com/goharbor/harbor/releases/download/${HARBOR_VERSION}/${harbor_file}" -o "${BUNDLE_DIR}/installers/${harbor_file}"
-  curl -fL "https://github.com/goharbor/harbor/releases/download/${HARBOR_VERSION}/${harbor_file}.asc" -o "${BUNDLE_DIR}/installers/${harbor_file}.asc" || true
+  harbor_url="https://github.com/goharbor/harbor/releases/download/${HARBOR_VERSION}/${harbor_file}"
+  curl -fL "${harbor_url}" -o "${BUNDLE_DIR}/installers/${harbor_file}"
+
+  # Harbor 2.15+ release artifacts are signed with Cosign. Asset names can vary, so collect any sidecars
+  # that exist and always generate local SHA256SUMS for air-gap transfer validation.
+  for suffix in .sig .pem .bundle .sha256 .sha256sum .asc; do
+    download_if_exists "${harbor_url}${suffix}" "${BUNDLE_DIR}/installers/${harbor_file}${suffix}" "Harbor release sidecar ${harbor_file}${suffix}" || true
+  done
 fi
 
 if [[ "${DOWNLOAD_DHI_IMAGE}" == "true" ]]; then
-  echo "==> Docker login is required to pull the DHI image: ${DHI_IMAGE}"
+  log "Docker login is required to pull the DHI image: ${DHI_IMAGE}"
   if [[ -z "${DOCKER_USERNAME:-}" ]]; then
     read -r -p "Docker username: " DOCKER_USERNAME
   fi
@@ -92,9 +120,21 @@ if [[ "${DOWNLOAD_DHI_IMAGE}" == "true" ]]; then
     read -r -s -p "Docker password or access token: " DOCKER_PASSWORD
     echo
   fi
-  echo "${DOCKER_PASSWORD}" | docker login --username "${DOCKER_USERNAME}" --password-stdin
 
-  echo "==> Pulling ${DHI_IMAGE}"
+  # Use an ephemeral Docker credential store so sudo runs do not leave registry credentials in /root/.docker/config.json.
+  docker_config_tmp="$(mktemp -d /tmp/kubeharbor-docker-config.XXXXXX)"
+  chmod 0700 "${docker_config_tmp}"
+  export DOCKER_CONFIG="${docker_config_tmp}"
+  cleanup_docker_config() {
+    docker logout >/dev/null 2>&1 || true
+    rm -rf "${docker_config_tmp}" >/dev/null 2>&1 || true
+  }
+  trap cleanup_docker_config EXIT
+
+  echo "${DOCKER_PASSWORD}" | docker login --username "${DOCKER_USERNAME}" --password-stdin
+  unset DOCKER_PASSWORD
+
+  log "Pulling ${DHI_IMAGE}"
   docker pull "${DHI_IMAGE}"
 
   image_safe="$(echo "${DHI_IMAGE}" | tr '/:@' '___')"
@@ -102,7 +142,6 @@ if [[ "${DOWNLOAD_DHI_IMAGE}" == "true" ]]; then
   docker save "${DHI_IMAGE}" -o "${image_tar}"
   docker image inspect "${DHI_IMAGE}" > "${BUNDLE_DIR}/images/${image_safe}.inspect.json"
   echo "${DHI_IMAGE}" > "${BUNDLE_DIR}/images/DHI_IMAGE_REF.txt"
-  docker logout >/dev/null 2>&1 || true
 fi
 
 # Checksums and artifact inventory.
@@ -128,17 +167,18 @@ Harbor offline installer: installers/
 Extra image archives: images/
 ARTIFACTS
 
-# Do not package output/ recursively. Do not include local shell history or Docker credentials.
+# Do not package output/ recursively. Do not include local shell history, Docker credentials, or private keys.
 package_path="${OUTPUT_DIR}/${PACKAGE_BASENAME}.tgz"
 checksum_path="${package_path}.sha256"
 
-echo "==> Creating moveable air-gap tarball: ${package_path}"
+log "Creating moveable air-gap tarball: ${package_path}"
 parent="$(dirname "${BUNDLE_DIR}")"
 name="$(basename "${BUNDLE_DIR}")"
 tar -C "$parent" \
   --exclude="${name}/output" \
   --exclude="${name}/.git" \
   --exclude="${name}/certs/*.key" \
+  --exclude="${name}/.docker" \
   -czf "$package_path" "$name"
 sha256sum "$package_path" > "$checksum_path"
 
