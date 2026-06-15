@@ -28,7 +28,7 @@
 ## Harbor
 
 - Use internal CA-signed TLS certificate with SAN for the Harbor FQDN.
-- Do not leave the CA private key on the Harbor VM.
+- Distribute only the CA certificate (`ca.crt`) to Harbor clients and nodes.
 - Change the default admin password before install.
 - Disable self-registration unless there is a governance reason to allow it.
 - Create named users or integrate identity; avoid shared admin workflows.

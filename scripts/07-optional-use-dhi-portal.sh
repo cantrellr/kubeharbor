@@ -22,7 +22,9 @@ backup="${compose_file}.before-dhi-portal-$(date +%Y%m%d-%H%M%S)"
 tmp_compose="${compose_file}.tmp-$$"
 
 python3 - "$compose_file" "$tmp_compose" "${DHI_HARBOR_PORTAL_IMAGE}" <<'PY'
-import sys, pathlib
+import pathlib
+import sys
+
 compose = pathlib.Path(sys.argv[1])
 out_path = pathlib.Path(sys.argv[2])
 image = sys.argv[3]
@@ -30,18 +32,42 @@ lines = compose.read_text().splitlines()
 out = []
 in_portal = False
 patched = False
+portal_user_seen = False
+image_out_idx = None
+image_indent = "    "
+
 for line in lines:
-    stripped = line.strip()
-    if line.startswith("  ") and not line.startswith("    ") and stripped.endswith(":"):
-        in_portal = stripped == "portal:"
-    if in_portal and stripped.startswith("image:"):
-        indent = line[:len(line) - len(line.lstrip())]
-        out.append(f"{indent}image: {image}")
-        patched = True
-        continue
-    out.append(line)
+  stripped = line.strip()
+  if line.startswith("  ") and not line.startswith("    ") and stripped.endswith(":"):
+    if in_portal and image_out_idx is not None and not portal_user_seen:
+      out.insert(image_out_idx + 1, f'{image_indent}user: "0:0"')
+      image_out_idx = None
+    in_portal = stripped == "portal:"
+    if in_portal:
+      portal_user_seen = False
+      image_out_idx = None
+
+  if in_portal and stripped.startswith("image:"):
+    image_indent = line[: len(line) - len(line.lstrip())]
+    out.append(f"{image_indent}image: {image}")
+    image_out_idx = len(out) - 1
+    patched = True
+    continue
+
+  if in_portal and stripped.startswith("user:"):
+    indent = line[: len(line) - len(line.lstrip())]
+    out.append(f'{indent}user: "0:0"')
+    portal_user_seen = True
+    continue
+
+  out.append(line)
+
+if in_portal and image_out_idx is not None and not portal_user_seen:
+  out.insert(image_out_idx + 1, f'{image_indent}user: "0:0"')
+
 if not patched:
     raise SystemExit("Could not find portal image line in docker-compose.yml")
+
 out_path.write_text("\n".join(out) + "\n")
 PY
 

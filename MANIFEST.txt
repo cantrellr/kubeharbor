@@ -22,7 +22,6 @@ Included:
 - systemd/harbor.service
 - tools/download-airgap-artifacts-on-internet-host.sh
 - tools/clean-airgap-downloads.sh
-- tools/create-leaf-cert-with-local-ca.sh
 - docs/README.md
 - docs/hardening-checklist.md
 - docs/operator-runbook.md
@@ -34,5 +33,4 @@ Downloaded later by staging script:
 
 Not included by design:
 - Production TLS certificate/private key
-- CA private key
 - Docker credentials

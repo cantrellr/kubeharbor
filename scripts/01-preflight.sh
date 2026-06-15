@@ -87,9 +87,6 @@ fi
 if [[ -n "${HARBOR_CA_CERT_SOURCE}" && ! -f "${BUNDLE_DIR}/${HARBOR_CA_CERT_SOURCE}" ]]; then
   warn "Missing CA cert ${BUNDLE_DIR}/${HARBOR_CA_CERT_SOURCE}. Harbor can still run, but client trust distribution will be manual."
 fi
-if [[ -f "${BUNDLE_DIR}/${HARBOR_CA_KEY_SOURCE}" ]]; then
-  warn "CA private key found in bundle. Harbor does not need it. Remove it from the VM after certificate work is complete."
-fi
 
 openssl x509 -in "${BUNDLE_DIR}/${HARBOR_LEAF_CERT_SOURCE}" -noout >/dev/null || fail "Leaf certificate is not readable by openssl."
 openssl rsa -in "${BUNDLE_DIR}/${HARBOR_LEAF_KEY_SOURCE}" -check -noout >/dev/null 2>&1 || fail "Leaf private key failed openssl validation."

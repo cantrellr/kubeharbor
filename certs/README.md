@@ -10,13 +10,7 @@ kubeharbor.dev.kube.key   # leaf/server private key
 ca.crt                    # issuing/root CA certificate for client trust distribution
 ```
 
-Optional file:
-
-```text
-ca.key                    # CA private key; only needed if you intentionally sign the leaf cert on this VM
-```
-
-Harbor does **not** need the CA private key to run. Operationally, leaving `ca.key` on the Harbor VM is a bad control decision unless the VM is also your signing workstation. Keep the CA key offline or in your approved PKI workflow.
+Only the three files above are required and supported in this bundle workflow.
 
 The leaf certificate SAN should include:
 

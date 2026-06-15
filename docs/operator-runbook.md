@@ -58,6 +58,17 @@ cd /opt/harbor
 sudo docker compose images portal
 ```
 
+When `USE_DHI_HARBOR_PORTAL=true`, the override script now enforces `user: "0:0"` on the `portal` service in `docker-compose.yml` for compatibility with the mounted `nginx.conf` permissions.
+
+If portal still restarts, check quickly:
+
+```bash
+cd /opt/harbor
+sudo docker compose ps portal
+sudo docker logs --tail=100 harbor-portal
+sudo docker inspect harbor-portal --format 'status={{.State.Status}} restart={{.RestartCount}} user={{.Config.User}}'
+```
+
 ## Login/push/pull smoke test
 
 ```bash
