@@ -74,6 +74,11 @@ PY
 cp -a "$compose_file" "$backup"
 mv "$tmp_compose" "$compose_file"
 
+portal_nginx_conf="${HARBOR_INSTALL_DIR}/common/config/portal/nginx.conf"
+if [[ -f "${portal_nginx_conf}" ]]; then
+  chmod 0644 "${portal_nginx_conf}"
+fi
+
 cd "${HARBOR_INSTALL_DIR}"
 if ! docker compose config --quiet; then
   cp -a "$backup" "$compose_file"
@@ -81,7 +86,7 @@ if ! docker compose config --quiet; then
   exit 1
 fi
 
-if ! docker compose up -d; then
+if ! docker compose up -d --force-recreate portal; then
   cp -a "$backup" "$compose_file"
   echo "WARN: failed to apply DHI portal override; restoring previous compose and restarting Harbor." >&2
   docker compose up -d || true

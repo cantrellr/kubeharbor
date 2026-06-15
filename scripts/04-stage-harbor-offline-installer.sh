@@ -46,6 +46,18 @@ mv "${tmp_extract_dir}/harbor" "${HARBOR_INSTALL_DIR}"
 rm -rf "${tmp_extract_dir}"
 trap - ERR
 
+portal_nginx_conf="${HARBOR_INSTALL_DIR}/common/config/portal/nginx.conf"
+if [[ -d "${portal_nginx_conf}" ]]; then
+  echo "WARN: ${portal_nginx_conf} is a directory; restoring file form before Harbor prepare step."
+  rm -rf "${portal_nginx_conf}"
+  if [[ -f "${backup_dir}/common/config/portal/nginx.conf" ]]; then
+    install -m 0644 "${backup_dir}/common/config/portal/nginx.conf" "${portal_nginx_conf}"
+  else
+    : > "${portal_nginx_conf}"
+    chmod 0644 "${portal_nginx_conf}"
+  fi
+fi
+
 if [[ ! -x "${HARBOR_INSTALL_DIR}/install.sh" ]]; then
   echo "ERROR: extracted installer did not produce ${HARBOR_INSTALL_DIR}/install.sh" >&2
   exit 1
