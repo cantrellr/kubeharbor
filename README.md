@@ -15,9 +15,19 @@ This bundle deploys Harbor on a single Ubuntu 24.04 LTS VM named `kubeharbor` us
 | Data disk | 500 GB mounted at `/data` |
 | Runtime | Docker Engine + Docker Compose plugin |
 | Harbor | v2.15.1 offline installer |
-| Extra DHI image | `cantrellcloud/dhi-harbor-portal:2.15.1-debian-dev` |
+| DHI portal image | `cantrellcloud/dhi-harbor-portal:2.15.1-debian` |
 
 This is viable for a small/internal air-gapped registry. It is not a high-availability design. Treat Harbor as a platform dependency: if it is down, Kubernetes lifecycle work gets painful quickly.
+
+## Recommended DHI image tag
+
+Use the runtime Docker Hardened Image tag that matches the Harbor version deployed by the offline installer:
+
+```bash
+cantrellcloud/dhi-harbor-portal:2.15.1-debian
+```
+
+Do not use the `-dev` variant as the default steady-state portal image. The `-dev` tag is intended for build/troubleshooting workflows and usually carries a larger runtime footprint. Use it only when you are intentionally debugging or validating the hardened image behavior.
 
 ## What the Internet staging script does
 
@@ -33,10 +43,17 @@ The script:
 2. Downloads Docker Engine, CLI, containerd, Buildx, Compose plugin, and dependency `.deb` files into `packages/docker-debs/`.
 3. Downloads the Harbor offline installer into `installers/`.
 4. Prompts for Docker username and password/access token.
-5. Runs `docker pull cantrellcloud/dhi-harbor-portal:2.15.1-debian-dev`.
+5. Runs `docker pull cantrellcloud/dhi-harbor-portal:2.15.1-debian` by default.
 6. Saves that image into `images/*.tar`.
 7. Generates SHA256 files.
 8. Creates one moveable tarball under `output/`.
+
+To override the DHI tag for testing:
+
+```bash
+sudo DHI_IMAGE="cantrellcloud/dhi-harbor-portal:2.15.1-debian-dev" \
+  ./tools/download-airgap-artifacts-on-internet-host.sh
+```
 
 ## Air-gap deployment flow
 
@@ -90,15 +107,22 @@ sudo ./install.sh
 
 ## DHI portal behavior
 
-The bundle always downloads and loads the DHI image when the staging script runs successfully.
-
-By default, Harbor uses the official image set from the Harbor offline installer. To swap only the `portal` service to the DHI image after the official installer runs, set:
+By default, the bundle downloads, loads, and attempts to use the DHI Harbor portal runtime image:
 
 ```bash
 USE_DHI_HARBOR_PORTAL="true"
+DHI_HARBOR_PORTAL_IMAGE="cantrellcloud/dhi-harbor-portal:2.15.1-debian"
 ```
 
-That is intentionally explicit because `dhi-harbor-portal` is one Harbor component, not the entire Harbor deployment stack.
+The official Harbor offline installer still deploys the complete Harbor stack first. Then the bundle swaps only the `portal` service to the DHI image. The override script patches Harbor's generated portal `nginx.conf` for DHI's 8080/non-root runtime model, validates the config inside the DHI image, recreates only the portal service, and rolls back if the portal does not remain healthy.
+
+To deploy the official Harbor image set without the DHI portal override:
+
+```bash
+USE_DHI_HARBOR_PORTAL="false"
+```
+
+That escape hatch is useful for break/fix validation. Do not treat it as the desired steady-state unless the DHI image compatibility gate fails.
 
 ## Docker client trust
 
@@ -128,4 +152,3 @@ sudo ./tools/clean-airgap-downloads.sh --yes --purge-docker-images --purge-docke
 ```
 
 Use `--purge-certs` only when you intentionally want to delete files staged under `certs/`.
-
