@@ -58,15 +58,30 @@ cd /opt/harbor
 sudo docker compose images portal
 ```
 
-When `USE_DHI_HARBOR_PORTAL=true`, the override script now enforces `user: "0:0"` on the `portal` service in `docker-compose.yml` for compatibility with the mounted `nginx.conf` permissions.
+Expected default DHI image:
 
-If portal still restarts, check quickly:
+```bash
+cantrellcloud/dhi-harbor-portal:2.15.1-debian
+```
+
+When `USE_DHI_HARBOR_PORTAL=true`, the override script patches Harbor's generated portal `nginx.conf` for DHI's 8080/non-root runtime model, removes forced portal user overrides, validates the nginx config inside the DHI image, recreates only the portal service, and rolls back if the portal does not remain healthy.
+
+If portal restarts, check quickly:
 
 ```bash
 cd /opt/harbor
 sudo docker compose ps portal
 sudo docker logs --tail=100 harbor-portal
-sudo docker inspect harbor-portal --format 'status={{.State.Status}} restart={{.RestartCount}} user={{.Config.User}}'
+sudo docker inspect harbor-portal --format 'status={{.State.Status}} restart={{.RestartCount}} user={{.Config.User}} image={{.Config.Image}}'
+```
+
+Fast rollback to the official Harbor portal image:
+
+```bash
+cd /opt/harbor
+latest_backup="$(ls -1t docker-compose.yml.before-dhi-portal-* | head -1)"
+sudo cp "$latest_backup" docker-compose.yml
+sudo docker compose up -d
 ```
 
 ## Login/push/pull smoke test
@@ -144,6 +159,7 @@ Changes added in bundle v3:
 - Optional Harbor signature/checksum sidecar downloads are probed before fetch. If a sidecar does not exist for the release, the script now reports a controlled warning instead of printing a raw `curl: (22) 404`.
 - Docker registry login now uses an ephemeral `DOCKER_CONFIG` under `/tmp` and deletes it on exit. This prevents credentials from being persisted in `/root/.docker/config.json` when running the staging script with `sudo`.
 - The apt download scratch directory is world-writable under `/tmp` during package download to reduce `_apt` sandbox warnings. The warnings were not fatal, but they cluttered the output.
+
 ## Clean slate before another Internet-connected staging run
 
 Use this before rerunning the artifact downloader when you want a known-clean package state.
@@ -160,4 +176,3 @@ sudo ./tools/clean-airgap-downloads.sh --yes --purge-docker-images --purge-docke
 ```
 
 Do not use `--purge-certs` unless you are deliberately deleting staged certificate material.
-
