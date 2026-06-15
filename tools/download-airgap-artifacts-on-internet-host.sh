@@ -7,7 +7,8 @@ set -euo pipefail
 
 BUNDLE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HARBOR_VERSION="${HARBOR_VERSION:-v2.15.1}"
-DHI_IMAGE="${DHI_IMAGE:-cantrellcloud/dhi-harbor-portal:2.15.1-debian-dev}"
+# Default to the runtime Docker Hardened Image tag. Use the -dev tag only for build/debug workflows.
+DHI_IMAGE="${DHI_IMAGE:-cantrellcloud/dhi-harbor-portal:2.15.1-debian}"
 DOWNLOAD_HARBOR="${DOWNLOAD_HARBOR:-true}"
 DOWNLOAD_DOCKER_DEBS="${DOWNLOAD_DOCKER_DEBS:-true}"
 DOWNLOAD_DHI_IMAGE="${DOWNLOAD_DHI_IMAGE:-true}"
