@@ -6,6 +6,28 @@ echo "==> Preparing Harbor data disk"
 fail() { echo "ERROR: $*" >&2; exit 1; }
 warn() { echo "WARN: $*" >&2; }
 
+ensure_safe_disk_target() {
+  local dev="$1"
+  local dev_type root_src root_parent
+
+  [[ -b "$dev" ]] || fail "DATA_DISK_DEVICE=${dev} is not a block device."
+
+  dev_type="$(lsblk -dn -o TYPE "$dev" 2>/dev/null || true)"
+  [[ "$dev_type" == "disk" ]] || fail "DATA_DISK_DEVICE=${dev} must reference a whole disk device, not a partition."
+
+  root_src="$(findmnt -n -o SOURCE / 2>/dev/null || true)"
+  if [[ -n "$root_src" && -b "$root_src" ]]; then
+    root_parent="/dev/$(lsblk -no PKNAME "$root_src" 2>/dev/null || true)"
+    if [[ "$dev" == "$root_src" || "$dev" == "$root_parent" ]]; then
+      fail "Refusing to format ${dev}: it appears to be the OS/root disk path (${root_src})."
+    fi
+  fi
+
+  if lsblk -nrpo NAME,MOUNTPOINT "$dev" | awk 'NF > 1 && $2 != "" {found=1} END {exit found ? 0 : 1}'; then
+    fail "Refusing to format ${dev}: one or more partitions are currently mounted."
+  fi
+}
+
 [[ "${PREPARE_DATA_DISK}" == "true" ]] || { echo "INFO: PREPARE_DATA_DISK=false; skipping."; exit 0; }
 
 mkdir -p "${HARBOR_DATA_VOLUME}"
@@ -17,6 +39,7 @@ else
     [[ -b "${DATA_DISK_DEVICE}" ]] || fail "DATA_DISK_DEVICE=${DATA_DISK_DEVICE} is not a block device."
 
     if [[ "${FORMAT_DATA_DISK}" == "true" ]]; then
+      ensure_safe_disk_target "${DATA_DISK_DEVICE}"
       echo "WARNING: This will DESTROY data on ${DATA_DISK_DEVICE} and create one ${DATA_DISK_FS} partition mounted at ${HARBOR_DATA_VOLUME}."
       lsblk -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINT,LABEL,MODEL "${DATA_DISK_DEVICE}" || true
       read -r -p "Type FORMAT-${DATA_DISK_DEVICE} to continue: " confirm

@@ -88,6 +88,36 @@ Then deploy:
 sudo ./install.sh
 ```
 
+### What `install.sh` now validates before install proceeds
+
+The preflight step now fails early on common deployment blockers:
+
+- Missing/empty required settings in `config/harbor.env`.
+- Placeholder or too-short (`<16`) Harbor admin/DB passwords.
+- Harbor installer/version mismatch (`harbor-offline-installer-<version>.tgz` vs `HARBOR_VERSION`).
+- `HARBOR_CONFIG_VERSION` mismatch against `HARBOR_VERSION` (without `v`).
+- SHA256 mismatches in `installers/`, `images/`, and `packages/docker-debs/`.
+- TLS cert/key mismatch, invalid CA chain, or cert hostname mismatch.
+- Invalid DHI portal toggle combinations.
+
+For lab-only validation on undersized VMs, you can set:
+
+- `ALLOW_UNDERSIZED_LAB="true"`
+
+This downgrades CPU/RAM baseline failures to warnings. Keep it `false` for production-like installs.
+
+This is intentional: fix preflight errors first, then rerun `sudo ./install.sh`.
+
+### Safer destructive disk behavior
+
+When `FORMAT_DATA_DISK="true"`, the installer now refuses to format if:
+
+- `DATA_DISK_DEVICE` is not a full disk (`TYPE=disk`).
+- The selected disk appears to be the OS/root disk.
+- Any partition on that disk is currently mounted.
+
+Continue only after validating the target device with `lsblk`.
+
 ## DHI portal behavior
 
 The bundle always downloads and loads the DHI image when the staging script runs successfully.

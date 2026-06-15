@@ -29,9 +29,14 @@ trivy:
 
 jobservice:
   max_job_workers: 10
+  job_loggers:
+    - STD_OUTPUT
+    - FILE
+  logger_sweeper_duration: 1 #days
 
 notification:
   webhook_job_max_retry: 10
+  webhook_job_http_client_timeout: 3 #seconds
 
 chart:
   absolute_url: disabled

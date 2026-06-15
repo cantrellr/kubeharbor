@@ -19,12 +19,13 @@ compose_file="${HARBOR_INSTALL_DIR}/docker-compose.yml"
 [[ -f "$compose_file" ]] || { echo "ERROR: missing ${compose_file}" >&2; exit 1; }
 
 backup="${compose_file}.before-dhi-portal-$(date +%Y%m%d-%H%M%S)"
-cp -a "$compose_file" "$backup"
+tmp_compose="${compose_file}.tmp-$$"
 
-python3 - "$compose_file" "${DHI_HARBOR_PORTAL_IMAGE}" <<'PY'
+python3 - "$compose_file" "$tmp_compose" "${DHI_HARBOR_PORTAL_IMAGE}" <<'PY'
 import sys, pathlib
 compose = pathlib.Path(sys.argv[1])
-image = sys.argv[2]
+out_path = pathlib.Path(sys.argv[2])
+image = sys.argv[3]
 lines = compose.read_text().splitlines()
 out = []
 in_portal = False
@@ -41,11 +42,25 @@ for line in lines:
     out.append(line)
 if not patched:
     raise SystemExit("Could not find portal image line in docker-compose.yml")
-compose.write_text("\n".join(out) + "\n")
+out_path.write_text("\n".join(out) + "\n")
 PY
 
+cp -a "$compose_file" "$backup"
+mv "$tmp_compose" "$compose_file"
+
 cd "${HARBOR_INSTALL_DIR}"
-docker compose down
-docker compose up -d
+if ! docker compose config --quiet; then
+  cp -a "$backup" "$compose_file"
+  echo "ERROR: patched docker-compose.yml is invalid; restored backup ${backup}" >&2
+  exit 1
+fi
+
+if ! docker compose up -d; then
+  cp -a "$backup" "$compose_file"
+  echo "WARN: failed to apply DHI portal override; restoring previous compose and restarting Harbor." >&2
+  docker compose up -d || true
+  echo "ERROR: DHI portal override failed. Restored compose from ${backup}." >&2
+  exit 1
+fi
 
 echo "INFO: Harbor portal service now uses ${DHI_HARBOR_PORTAL_IMAGE}. Previous compose saved as ${backup}."

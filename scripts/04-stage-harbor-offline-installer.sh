@@ -13,13 +13,38 @@ installer="${installers[0]}"
 
 mkdir -p "${HARBOR_INSTALL_PARENT}"
 
+tmp_extract_dir="${HARBOR_INSTALL_PARENT}/.harbor-extract-$$"
+backup_dir=""
+
 if [[ -d "${HARBOR_INSTALL_DIR}" ]]; then
   stamp="$(date +%Y%m%d-%H%M%S)"
-  echo "INFO: existing ${HARBOR_INSTALL_DIR} found; backing up to ${HARBOR_INSTALL_DIR}.bak-${stamp}"
-  mv "${HARBOR_INSTALL_DIR}" "${HARBOR_INSTALL_DIR}.bak-${stamp}"
+  backup_dir="${HARBOR_INSTALL_DIR}.bak-${stamp}"
+  echo "INFO: existing ${HARBOR_INSTALL_DIR} found; backing up to ${backup_dir}"
+  mv "${HARBOR_INSTALL_DIR}" "${backup_dir}"
 fi
 
-tar -xzf "$installer" -C "${HARBOR_INSTALL_PARENT}"
+cleanup_failed_stage() {
+  if [[ -d "${tmp_extract_dir}" ]]; then
+    rm -rf "${tmp_extract_dir}"
+  fi
+  if [[ ! -d "${HARBOR_INSTALL_DIR}" && -n "${backup_dir}" && -d "${backup_dir}" ]]; then
+    echo "WARN: staging failed; restoring previous Harbor directory from ${backup_dir}" >&2
+    mv "${backup_dir}" "${HARBOR_INSTALL_DIR}"
+  fi
+}
+trap cleanup_failed_stage ERR
+
+mkdir -p "${tmp_extract_dir}"
+tar -xzf "$installer" -C "${tmp_extract_dir}"
+
+if [[ ! -d "${tmp_extract_dir}/harbor" ]]; then
+  echo "ERROR: extracted installer did not include harbor/ directory" >&2
+  exit 1
+fi
+
+mv "${tmp_extract_dir}/harbor" "${HARBOR_INSTALL_DIR}"
+rm -rf "${tmp_extract_dir}"
+trap - ERR
 
 if [[ ! -x "${HARBOR_INSTALL_DIR}/install.sh" ]]; then
   echo "ERROR: extracted installer did not produce ${HARBOR_INSTALL_DIR}/install.sh" >&2

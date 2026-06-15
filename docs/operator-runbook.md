@@ -27,6 +27,30 @@ sudo docker compose up -d
 curl -k https://kubeharbor.dev.kube/api/v2.0/ping
 ```
 
+## Preflight checks now enforced by installer
+
+`sudo ./install.sh` now fails early when critical checks fail. Current enforced checks include:
+
+- Required settings in `config/harbor.env` are empty.
+- Password placeholders remain or admin/DB passwords are shorter than 16 chars.
+- Harbor installer filename does not match `HARBOR_VERSION`.
+- `HARBOR_CONFIG_VERSION` does not match `HARBOR_VERSION` without `v` prefix.
+- SHA256 checksum mismatch in `installers/`, `images/`, or `packages/docker-debs/`.
+- TLS leaf cert/key mismatch, CA chain verification failure, or hostname mismatch in cert SAN/CN.
+- `USE_DHI_HARBOR_PORTAL=true` with incompatible image-loading settings.
+
+If preflight fails, fix the reported item and rerun `sudo ./install.sh`.
+
+## Disk formatting safety
+
+When `FORMAT_DATA_DISK=true`, installer safeguards now block formatting if:
+
+- `DATA_DISK_DEVICE` is not a full disk device.
+- The selected disk appears to be the root OS disk.
+- Any partition on the selected disk is mounted.
+
+Always validate with `lsblk` before confirming the format prompt.
+
 ## Confirm portal image
 
 ```bash
@@ -45,6 +69,23 @@ docker pull kubeharbor.dev.kube/library/<local-image>:<tag>
 ```
 
 In a fully air-gapped environment, use an image already present on the staging client instead of pulling from the Internet.
+
+## Verification behavior after install
+
+`scripts/10-verify.sh` now checks:
+
+- Required Harbor services are running.
+- HTTPS API ping with retries.
+- Optional authenticated API check using `admin` credentials.
+
+If verification reports warnings, inspect logs before promoting the host for production use:
+
+```bash
+cd /opt/harbor
+sudo docker compose ps
+sudo docker compose logs --tail=300
+sudo ls -lah /var/log/harbor
+```
 
 ## Backup
 
