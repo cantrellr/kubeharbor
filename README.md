@@ -29,6 +29,33 @@ cantrellcloud/dhi-harbor-portal:2.15.1-debian
 
 Do not use the `-dev` variant as the default steady-state portal image. The `-dev` tag is intended for build/troubleshooting workflows and usually carries a larger runtime footprint. Use it only when you are intentionally debugging or validating the hardened image behavior.
 
+## Storage defaults
+
+The VM has a 64 GB OS disk and a 500 GB data disk. Large image workflows must not land under `/var/lib/docker` on the OS disk.
+
+Current defaults in `config/harbor.env`:
+
+```bash
+HARBOR_DATA_VOLUME="/data"
+DOCKER_DATA_ROOT="/data/docker"
+CONTAINERD_ROOT="/data/containerd"
+IMAGE_TRANSFER_ROOT="/data/kubeharbor-image-transfer"
+```
+
+The Docker installer writes both Docker and containerd storage settings so the local pull cache lives on `/data` before large image acquisition starts.
+
+Validate before pulling the application image list:
+
+```bash
+sudo docker info --format '{{.DockerRootDir}}'
+```
+
+Expected:
+
+```text
+/data/docker
+```
+
 ## What the Internet staging script does
 
 Run this on an Internet-connected Ubuntu 24.04 amd64 staging host:
@@ -124,6 +151,30 @@ USE_DHI_HARBOR_PORTAL="false"
 
 That escape hatch is useful for break/fix validation. Do not treat it as the desired steady-state unless the DHI image compatibility gate fails.
 
+## Large image pull/push workflow
+
+Use this when you have an Internet-connected VM with the kubeharbor repo and the separate `image-airgap-bundle-updated.zip` image-list bundle.
+
+Install the image list bundle onto `/data`:
+
+```bash
+sudo ./tools/install-image-airgap-bundle.sh /path/to/image-airgap-bundle-updated.zip --replace
+```
+
+Pull all images while the VM still has Internet access:
+
+```bash
+sudo ./tools/pull-images-to-data-cache.sh
+```
+
+After the VM is cloned and moved/re-IP'd into the air-gapped environment, push the locally cached images into the reachable Harbor registry:
+
+```bash
+sudo ./tools/push-data-cache-to-harbor.sh --target kubeharbor.dev.kube/library
+```
+
+The default push mode is `strip-registry`, so upstream references are mapped under the Harbor `library` project without the source registry hostname. Full details are in `docs/image-transfer-workflow.md`.
+
 ## Docker client trust
 
 On every Docker client that will push/pull from Harbor:
@@ -134,6 +185,7 @@ sudo docker login kubeharbor.dev.kube
 ```
 
 For RKE2/containerd nodes, configure trust in the RKE2/containerd registry configuration instead of Docker's `/etc/docker/certs.d` path.
+
 ## Reset downloaded artifacts / clean slate
 
 Run this on the Internet-connected staging host when you want to purge previously downloaded artifacts and rebuild the air-gap tarball from scratch.
