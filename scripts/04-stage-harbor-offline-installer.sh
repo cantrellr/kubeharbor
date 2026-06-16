@@ -58,7 +58,7 @@ if [[ -d "${portal_nginx_conf}" ]]; then
   fi
 fi
 
-if [[ ! -x "${HARBOR_INSTALL_DIR}/install.sh" ]]; then
+if [[ ! -f "${HARBOR_INSTALL_DIR}/install.sh" ]]; then
   echo "ERROR: extracted installer did not produce ${HARBOR_INSTALL_DIR}/install.sh" >&2
   exit 1
 fi
