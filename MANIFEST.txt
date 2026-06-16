@@ -22,15 +22,23 @@ Included:
 - systemd/harbor.service
 - tools/download-airgap-artifacts-on-internet-host.sh
 - tools/clean-airgap-downloads.sh
+- tools/install-image-airgap-bundle.sh
+- tools/pull-images-to-data-cache.sh
+- tools/push-data-cache-to-harbor.sh
 - docs/README.md
 - docs/hardening-checklist.md
 - docs/operator-runbook.md
+- docs/image-transfer-workflow.md
 
 Downloaded later by staging script:
 - Harbor offline installer tarball
 - Docker Engine and dependency .deb packages
 - DHI Harbor portal image tar archive
 
+Provided separately for large image promotion:
+- image-airgap-bundle-updated.zip with image lists and pull/push utility
+
 Not included by design:
 - Production TLS certificate/private key
 - Docker credentials
+- Downloaded third-party application images
