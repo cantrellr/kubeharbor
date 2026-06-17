@@ -19,6 +19,7 @@ Included:
 - scripts/08-install-client-docker-ca.sh
 - scripts/09-backup-harbor.sh
 - scripts/10-verify.sh
+- scripts/11-start-harbor-serial.sh
 - systemd/harbor.service
 - tools/download-airgap-artifacts-on-internet-host.sh
 - tools/clean-airgap-downloads.sh

@@ -132,6 +132,14 @@ Then deploy:
 sudo ./install.sh
 ```
 
+Harbor startup now defaults to serial orchestration to avoid logger startup races:
+
+1. Start `harbor-log` first.
+2. Wait for `127.0.0.1:1514` listener readiness.
+3. Start remaining Harbor services.
+
+This replaces the previous parallel-first startup with retry/fallback behavior.
+
 ## DHI portal behavior
 
 By default, the bundle downloads, loads, and attempts to use the DHI Harbor portal runtime image:
@@ -185,6 +193,10 @@ sudo docker login kubeharbor.dev.kube
 ```
 
 For RKE2/containerd nodes, configure trust in the RKE2/containerd registry configuration instead of Docker's `/etc/docker/certs.d` path.
+
+## Service startup behavior
+
+`harbor.service` uses `/usr/local/sbin/harbor-start-serial.sh`, so `systemctl start harbor` follows the same serial log-bootstrap sequence as installer startup.
 
 ## Reset downloaded artifacts / clean slate
 

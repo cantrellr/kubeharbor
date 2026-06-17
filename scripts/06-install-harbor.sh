@@ -12,34 +12,44 @@ if [[ "${CONFIGURE_UFW}" == "true" ]] && command -v ufw >/dev/null 2>&1; then
   fi
 fi
 
-args=()
-if [[ "${INSTALL_TRIVY}" == "true" ]]; then
-  args+=("--with-trivy")
-fi
+wait_for_harbor_log_listener() {
+  local ready="false"
+  for _ in {1..20}; do
+    if ss -ltn '( sport = :1514 )' 2>/dev/null | grep -q ':1514'; then
+      ready="true"
+      break
+    fi
+    sleep 1
+  done
+
+  if [[ "${ready}" != "true" ]]; then
+    echo "ERROR: harbor-log listener on 127.0.0.1:1514 did not become ready." >&2
+    return 1
+  fi
+}
 
 start_harbor_with_serial_log_bootstrap() {
-  echo "INFO: applying fallback startup: bootstrap harbor-log first, then start remaining services."
+  echo "INFO: starting Harbor with serial startup: bootstrap harbor-log first, then start remaining services."
 
   prepare_args=()
   if [[ "${INSTALL_TRIVY}" == "true" ]]; then
     prepare_args+=("--with-trivy")
   fi
 
+  shopt -s nullglob
+  harbor_image_archives=(./harbor*.tar.gz)
+  shopt -u nullglob
+  if (( ${#harbor_image_archives[@]} > 0 )); then
+    echo "INFO: loading Harbor offline images from ${harbor_image_archives[*]}"
+    docker load -i "${harbor_image_archives[0]}"
+  fi
+
   ./prepare "${prepare_args[@]}"
   docker compose down -v || true
   docker compose up -d log
 
-  log_listener_ready="false"
-  for _ in {1..20}; do
-    if ss -ltn '( sport = :1514 )' 2>/dev/null | grep -q ':1514'; then
-      log_listener_ready="true"
-      break
-    fi
-    sleep 1
-  done
-
-  if [[ "${log_listener_ready}" != "true" ]]; then
-    echo "ERROR: harbor-log listener on 127.0.0.1:1514 did not become ready during fallback startup." >&2
+  if ! wait_for_harbor_log_listener; then
+    echo "ERROR: serial Harbor startup failed while waiting for harbor-log readiness." >&2
     return 1
   fi
 
@@ -67,37 +77,10 @@ reconcile_db_password_if_needed() {
   echo "INFO: reconciled Harbor DB password and restarted core/jobservice/proxy." >&2
 }
 
-# The offline installer includes Harbor's official image tarball. install.sh loads it locally and generates docker-compose.yml.
-attempt=1
-max_attempts=3
-while true; do
-  install_log="$(mktemp)"
-  if ./install.sh "${args[@]}" 2>&1 | tee "${install_log}"; then
-    rm -f "${install_log}"
-    break
-  fi
-
-  if grep -q "failed to initialize logging driver: dial tcp 127.0.0.1:1514: connect: connection refused" "${install_log}"; then
-    if (( attempt >= max_attempts )); then
-      echo "WARN: Harbor install failed after ${max_attempts} attempts due to logger startup race on 127.0.0.1:1514. Switching to serial fallback startup." >&2
-      rm -f "${install_log}"
-      if ! start_harbor_with_serial_log_bootstrap; then
-        echo "ERROR: serial fallback startup failed." >&2
-        exit 1
-      fi
-      break
-    fi
-    echo "WARN: Harbor install hit transient logger startup race (127.0.0.1:1514). Retrying in 5 seconds (attempt ${attempt}/${max_attempts})..." >&2
-    rm -f "${install_log}"
-    sleep 5
-    ((attempt++))
-    continue
-  fi
-
-  rm -f "${install_log}"
-  echo "ERROR: Harbor install failed for a non-retryable reason." >&2
+if ! start_harbor_with_serial_log_bootstrap; then
+  echo "ERROR: Harbor serial startup failed." >&2
   exit 1
-done
+fi
 
 if ! reconcile_db_password_if_needed; then
   echo "ERROR: Harbor database credential reconciliation failed." >&2
@@ -106,6 +89,7 @@ fi
 
 # Optional lifecycle unit. Harbor still uses Docker Compose underneath.
 install -m 0644 "${BUNDLE_DIR}/systemd/harbor.service" /etc/systemd/system/harbor.service
+install -m 0755 "${BUNDLE_DIR}/scripts/11-start-harbor-serial.sh" /usr/local/sbin/harbor-start-serial.sh
 systemctl daemon-reload
 systemctl enable harbor.service || true
 

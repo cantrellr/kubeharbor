@@ -2,6 +2,8 @@
 
 ## Start/stop/status
 
+Harbor now starts with serial orchestration by default: `harbor-log` is started first, the local syslog listener on `127.0.0.1:1514` is validated, and then remaining services are started.
+
 ```bash
 sudo systemctl status harbor
 sudo systemctl stop harbor
@@ -18,7 +20,7 @@ sudo docker compose logs -f --tail=200
 cd /opt/harbor
 sudo docker compose down
 sudo ./prepare
-sudo docker compose up -d
+sudo /usr/local/sbin/harbor-start-serial.sh
 ```
 
 ## Validate API
