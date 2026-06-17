@@ -14,6 +14,7 @@ ASSUME_YES="false"
 DRY_RUN="false"
 PURGE_DOCKER_IMAGES="false"
 PURGE_DOCKER_AUTH="false"
+PRUNE_CONTAINERS="false"
 PURGE_CERTS="false"
 PURGE_TMP="true"
 
@@ -39,6 +40,7 @@ Options:
       --dry-run             Show what would be removed, but do not remove it.
       --purge-docker-images Remove the staged DHI image from the local Docker image cache if present.
       --purge-docker-auth   Remove Docker auth files left by older runs, including /root/.docker/config.json.
+      --prune-containers    Stop and remove all Docker containers on this host.
       --purge-certs         Remove certs/*.crt, certs/*.key, certs/*.pem, certs/*.csr, certs/*.srl.
       --no-tmp              Do not remove /tmp scratch directories.
   -h, --help                Show this help.
@@ -47,6 +49,7 @@ Examples:
   sudo ./tools/clean-airgap-downloads.sh --yes
   sudo ./tools/clean-airgap-downloads.sh --dry-run
   sudo ./tools/clean-airgap-downloads.sh --yes --purge-docker-images --purge-docker-auth
+  sudo ./tools/clean-airgap-downloads.sh --yes --prune-containers
 USAGE
 }
 
@@ -56,6 +59,7 @@ while [[ $# -gt 0 ]]; do
     --dry-run) DRY_RUN="true" ;;
     --purge-docker-images) PURGE_DOCKER_IMAGES="true" ;;
     --purge-docker-auth) PURGE_DOCKER_AUTH="true" ;;
+    --prune-containers) PRUNE_CONTAINERS="true" ;;
     --purge-certs) PURGE_CERTS="true" ;;
     --no-tmp) PURGE_TMP="false" ;;
     -h|--help) usage; exit 0 ;;
@@ -135,6 +139,7 @@ Bundle directory:        ${BUNDLE_DIR}
 Dry run:                 ${DRY_RUN}
 Purge Docker images:     ${PURGE_DOCKER_IMAGES}
 Purge Docker auth:       ${PURGE_DOCKER_AUTH}
+Prune containers:        ${PRUNE_CONTAINERS}
 Purge cert files:        ${PURGE_CERTS}
 Purge temp directories:  ${PURGE_TMP}
 SUMMARY
@@ -161,6 +166,12 @@ if [[ "${PURGE_DOCKER_IMAGES}" == "true" ]]; then
   echo
   echo "Docker image selected for local cache removal if present:"
   echo "  ${DHI_IMAGE_REF:-<not detected>}"
+fi
+
+if [[ "${PRUNE_CONTAINERS}" == "true" ]]; then
+  echo
+  echo "Docker containers selected for stop/remove:"
+  echo "  all containers on this host"
 fi
 
 if [[ "${DRY_RUN}" == "true" ]]; then
@@ -208,6 +219,20 @@ if [[ "${PURGE_DOCKER_AUTH}" == "true" ]]; then
     user_home="$(getent passwd "${SUDO_USER}" | cut -d: -f6 || true)"
     if [[ -n "${user_home}" ]]; then
       rm -f "${user_home}/.docker/config.json"
+    fi
+  fi
+fi
+
+if [[ "${PRUNE_CONTAINERS}" == "true" ]]; then
+  if ! command -v docker >/dev/null 2>&1; then
+    warn "Docker CLI not found; skipping container prune."
+  else
+    mapfile -t container_ids < <(docker ps -aq)
+    if [[ ${#container_ids[@]} -eq 0 ]]; then
+      log "No Docker containers found to stop/remove."
+    else
+      log "Stopping and removing all Docker containers"
+      docker rm -f "${container_ids[@]}" >/dev/null 2>&1 || warn "One or more containers could not be removed."
     fi
   fi
 fi
