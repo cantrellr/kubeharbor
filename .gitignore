@@ -34,6 +34,9 @@ SHA256SUMS
 # Harbor extracted/runtime files if someone stages in repo root
 harbor/
 common/
+config/*
+!config/example-harbor.env
+!config/harbor.yml.template
 docker-compose.yml
 harbor.yml
 prepare
