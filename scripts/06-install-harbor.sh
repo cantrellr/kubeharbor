@@ -90,6 +90,7 @@ fi
 # Optional lifecycle unit. Harbor still uses Docker Compose underneath.
 install -m 0644 "${BUNDLE_DIR}/systemd/harbor.service" /etc/systemd/system/harbor.service
 install -m 0755 "${BUNDLE_DIR}/scripts/11-start-harbor-serial.sh" /usr/local/sbin/harbor-start-serial.sh
+install -m 0755 "${BUNDLE_DIR}/scripts/12-reset-harbor.sh" /usr/local/sbin/harbor-reset.sh
 systemctl daemon-reload
 systemctl enable harbor.service || true
 

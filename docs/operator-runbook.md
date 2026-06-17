@@ -23,6 +23,25 @@ sudo ./prepare
 sudo /usr/local/sbin/harbor-start-serial.sh
 ```
 
+## Clean Harbor deployment runtime (keep images and data)
+
+Use this to remove Harbor runtime resources without deleting local Docker images or Harbor data under `/data`.
+
+```bash
+sudo /usr/local/sbin/harbor-reset.sh --dry-run
+sudo /usr/local/sbin/harbor-reset.sh --yes
+sudo /usr/local/sbin/harbor-reset.sh --yes --remove-volumes
+```
+
+What it does:
+
+- Runs `docker compose down` in `/opt/harbor`.
+- Removes Harbor containers and compose networks.
+- Optionally removes Harbor compose volumes when `--remove-volumes` is passed.
+- When `--remove-volumes` is passed, also removes `/data/database`.
+- Preserves local Docker image cache.
+- Preserves Harbor data under `/data`.
+
 ## Validate API
 
 ```bash
