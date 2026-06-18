@@ -1,0 +1,40 @@
+flowchart TB
+    Start["Operator Runs<br/>sudo ./install.sh"]
+    SourceEnv["Source config/harbor.env"]
+    DiskCheck["Prepare/Validate /data"]
+    Preflight["Validate Settings, Certs,<br/>Checksums, Version Alignment"]
+    DockerPath{"INSTALL_DOCKER=true?"}
+    InstallDocker["Install Docker from<br/>packages/docker-debs"]
+    ValidateDocker["Validate Existing Docker<br/>and Compose"]
+    LoadImages["Load Extra Image Archives"]
+    StageInstaller["Extract Harbor Offline Installer<br/>to /opt/harbor"]
+    RenderConfig["Render /opt/harbor/harbor.yml"]
+    InstallHarbor["Run Harbor Prepare<br/>Serial Log Bootstrap"]
+    DHIPath{"USE_DHI_HARBOR_PORTAL=true?"}
+    ApplyDHI["Patch and Recreate Portal<br/>with DHI Image"]
+    KeepOfficial["Keep Official Portal Image"]
+    Verify["Verify Services and API"]
+    Success["Deployment Complete"]
+
+    Start --> SourceEnv
+    SourceEnv --> DiskCheck
+    DiskCheck --> Preflight
+    Preflight --> DockerPath
+    DockerPath -- Yes --> InstallDocker
+    DockerPath -- No --> ValidateDocker
+    InstallDocker --> LoadImages
+    ValidateDocker --> LoadImages
+    LoadImages --> StageInstaller
+    StageInstaller --> RenderConfig
+    RenderConfig --> InstallHarbor
+    InstallHarbor --> DHIPath
+    DHIPath -- Yes --> ApplyDHI
+    DHIPath -- No --> KeepOfficial
+    ApplyDHI --> Verify
+    KeepOfficial --> Verify
+    Verify --> Success
+
+    style Preflight fill:#fff3e0
+    style InstallHarbor fill:#e8f5e9
+    style ApplyDHI fill:#e3f2fd
+    style Success fill:#e8f5e9

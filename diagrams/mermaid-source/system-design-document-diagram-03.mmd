@@ -1,0 +1,49 @@
+flowchart TB
+    subgraph cluster_1_Config["Configuration Inputs"]
+        EnvFile["config/harbor.env"]
+        Template["config/harbor.yml.template"]
+        Certs["certs/*.crt<br/>certs/*.key"]
+    end
+
+    subgraph cluster_2_Orchestration["Install Orchestration"]
+        Install["install.sh"]
+        Disk["00-prepare-data-disk.sh"]
+        Preflight["01-preflight.sh"]
+        DockerInstall["02-install-docker-offline.sh"]
+        LoadImages["03-load-extra-images.sh"]
+        StageHarbor["04-stage-harbor-offline-installer.sh"]
+        Render["05-render-harbor-yml.sh"]
+        HarborInstall["06-install-harbor.sh"]
+        DHI["07-optional-use-dhi-portal.sh"]
+        Verify["10-verify.sh"]
+    end
+
+    subgraph cluster_3_Runtime["Runtime Outputs"]
+        DockerDaemon["/etc/docker/daemon.json"]
+        ContainerdConfig["/etc/containerd/config.toml"]
+        HarborYml["/opt/harbor/harbor.yml"]
+        Compose["/opt/harbor/docker-compose.yml"]
+        HarborSvc["/etc/systemd/system/harbor.service"]
+    end
+
+    EnvFile --> Install
+    Template --> Render
+    Certs --> Preflight
+    Install --> Disk
+    Disk --> Preflight
+    Preflight --> DockerInstall
+    DockerInstall --> LoadImages
+    LoadImages --> StageHarbor
+    StageHarbor --> Render
+    Render --> HarborInstall
+    HarborInstall --> DHI
+    DHI --> Verify
+    DockerInstall --> DockerDaemon
+    DockerInstall --> ContainerdConfig
+    Render --> HarborYml
+    HarborInstall --> Compose
+    HarborInstall --> HarborSvc
+
+    style Preflight fill:#fff3e0
+    style Verify fill:#e8f5e9
+    style Certs fill:#ffebee

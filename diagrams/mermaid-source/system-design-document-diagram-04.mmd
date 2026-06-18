@@ -1,0 +1,38 @@
+flowchart TB
+    subgraph cluster_1_Internet["Internet-Connected Build/Staging Phase"]
+        CloneRepo["Clone kubeharbor Repo"]
+        RunDownloader["Run tools/download-airgap-artifacts-on-internet-host.sh"]
+        PullDHI["Pull DHI Portal Image"]
+        SaveDHI["docker save DHI Image<br/>images/*.tar"]
+        DownloadDocker["Download Docker .deb Packages"]
+        DownloadHarbor["Download Harbor Offline Installer"]
+        Checksums["Generate SHA256SUMS"]
+        Package["Create output/kubeharbor-airgap-*.tgz"]
+    end
+
+    subgraph cluster_2_AirGapInstall["Air-Gapped Installation Phase"]
+        Extract["Extract Air-Gap Bundle"]
+        StageCerts["Stage TLS Certs into certs/"]
+        EditEnv["Edit config/harbor.env"]
+        RunInstall["sudo ./install.sh"]
+        Validate["scripts/10-verify.sh"]
+    end
+
+    CloneRepo --> RunDownloader
+    RunDownloader --> DownloadDocker
+    RunDownloader --> DownloadHarbor
+    RunDownloader --> PullDHI
+    PullDHI --> SaveDHI
+    DownloadDocker --> Checksums
+    DownloadHarbor --> Checksums
+    SaveDHI --> Checksums
+    Checksums --> Package
+    Package --> Extract
+    Extract --> StageCerts
+    StageCerts --> EditEnv
+    EditEnv --> RunInstall
+    RunInstall --> Validate
+
+    style RunInstall fill:#e8f5e9
+    style Checksums fill:#fff3e0
+    style StageCerts fill:#ffebee

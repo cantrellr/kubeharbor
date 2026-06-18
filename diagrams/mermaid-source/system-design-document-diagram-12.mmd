@@ -1,0 +1,35 @@
+flowchart TB
+    subgraph cluster_1_Observe["Observe"]
+        Systemctl["systemctl status harbor"]
+        ComposePS["docker compose ps"]
+        Logs["docker compose logs<br/>/var/log/harbor"]
+        API["curl /api/v2.0/ping"]
+    end
+
+    subgraph cluster_2_Decide["Decide"]
+        Healthy{"All required services running<br/>and API responding?"}
+        DiskPressure{"/data or Docker cache<br/>under pressure?"}
+        CertIssue{"TLS trust or cert<br/>expiration issue?"}
+    end
+
+    subgraph cluster_3_Act["Act"]
+        Restart["systemctl restart harbor"]
+        Investigate["Inspect service logs<br/>before pruning/deleting"]
+        Backup["Run backup workflow"]
+        TrustFix["Install/update CA trust"]
+        GCPlan["Plan Harbor GC<br/>and retention cleanup"]
+    end
+
+    Systemctl --> Healthy
+    ComposePS --> Healthy
+    Logs --> Healthy
+    API --> Healthy
+    Healthy -- No --> Investigate
+    Healthy -- Yes --> Backup
+    DiskPressure -- Yes --> GCPlan
+    CertIssue -- Yes --> TrustFix
+    Investigate --> Restart
+
+    style Healthy fill:#fff3e0
+    style Investigate fill:#ffebee
+    style Backup fill:#e8f5e9

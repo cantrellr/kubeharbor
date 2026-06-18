@@ -1,0 +1,35 @@
+flowchart TB
+    subgraph cluster_1_OSDisk["64 GB OS Disk"]
+        RootFS["Ubuntu Root Filesystem"]
+        OptHarbor["/opt/harbor<br/>Installer and Compose Assets"]
+        EtcConfig["/etc/docker<br/>/etc/containerd<br/>/etc/systemd"]
+    end
+
+    subgraph cluster_2_DataDisk["500 GB Data Disk mounted at /data"]
+        DataVolume["/data<br/>Harbor data_volume"]
+        DockerRoot["/data/docker<br/>DockerRootDir"]
+        ContainerdRoot["/data/containerd<br/>containerd root"]
+        TransferRoot["/data/kubeharbor-image-transfer<br/>image-airgap utility"]
+    end
+
+    subgraph cluster_3_Workloads["Storage Consumers"]
+        HarborServices["Harbor Compose Services"]
+        DockerPulls["docker pull/save/load"]
+        ImagePromotion["pull/push image promotion"]
+    end
+
+    RootFS --> OptHarbor
+    EtcConfig --> DockerRoot
+    EtcConfig --> ContainerdRoot
+    OptHarbor --> HarborServices
+    HarborServices --> DataVolume
+    DockerPulls --> DockerRoot
+    DockerPulls --> ContainerdRoot
+    ImagePromotion --> TransferRoot
+    ImagePromotion --> DockerRoot
+    ImagePromotion --> DataVolume
+
+    style DataVolume fill:#e3f2fd
+    style DockerRoot fill:#e8f5e9
+    style ContainerdRoot fill:#e8f5e9
+    style RootFS fill:#ffebee

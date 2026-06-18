@@ -1,0 +1,37 @@
+flowchart TB
+    subgraph cluster_1_Downloads["Downloaded Artifacts"]
+        Debs["Docker Packages<br/>*.deb"]
+        HarborInstaller["Harbor Offline Installer<br/>harbor-offline-installer-v2.15.1.tgz"]
+        ImageTar["DHI Image Archive<br/>images/*.tar"]
+    end
+
+    subgraph cluster_2_Metadata["Integrity Metadata"]
+        DebSums["packages/docker-debs/SHA256SUMS"]
+        HarborSums["installers/SHA256SUMS"]
+        ImageSums["images/SHA256SUMS"]
+        Artifacts["ARTIFACTS.txt<br/>Inventory"]
+    end
+
+    subgraph cluster_3_Preflight["Air-Gap Preflight Gate"]
+        CheckDebs["Verify Docker Package Checksums"]
+        CheckHarbor["Verify Installer Checksum<br/>and Version Match"]
+        CheckImages["Verify Image Archive Checksums"]
+        CheckTLS["Verify TLS Cert/Key/CA"]
+    end
+
+    Debs --> DebSums
+    HarborInstaller --> HarborSums
+    ImageTar --> ImageSums
+    DebSums --> CheckDebs
+    HarborSums --> CheckHarbor
+    ImageSums --> CheckImages
+    Artifacts --> CheckDebs
+    Artifacts --> CheckHarbor
+    Artifacts --> CheckImages
+    CheckDebs --> CheckHarbor
+    CheckHarbor --> CheckImages
+    CheckImages --> CheckTLS
+
+    style CheckTLS fill:#ffebee
+    style CheckHarbor fill:#fff3e0
+    style Artifacts fill:#e3f2fd

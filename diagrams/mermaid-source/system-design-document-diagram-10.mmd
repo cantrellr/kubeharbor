@@ -1,0 +1,39 @@
+flowchart TB
+    subgraph cluster_1_Inputs["Security-Sensitive Inputs"]
+        TLSLeaf["Leaf Certificate<br/>kubeharbor.dev.kube.crt"]
+        TLSKey["Private Key<br/>kubeharbor.dev.kube.key"]
+        CACert["CA Certificate<br/>ca.crt"]
+        AdminSecret["Harbor Admin Password"]
+        DBSecret["Harbor DB Password"]
+        RegistryCreds["Docker Registry Credentials<br/>Staging Only"]
+    end
+
+    subgraph cluster_2_Controls["Validation and Handling Controls"]
+        CertCheck["OpenSSL Cert Read<br/>Key Match<br/>SAN/CN Check"]
+        ChainCheck["Optional CA Chain Verify"]
+        SecretCheck["Placeholder and Length Checks"]
+        EphemeralDockerConfig["Ephemeral DOCKER_CONFIG<br/>Removed on Exit"]
+        TarExcludes["Package Excludes<br/>Private Keys, .git, .docker"]
+    end
+
+    subgraph cluster_3_Consumers["Trusted Consumers"]
+        DockerTrust["Docker certs.d Trust"]
+        ContainerdTrust["RKE2/containerd Registry Trust"]
+        HarborTLS["Harbor HTTPS Endpoint"]
+    end
+
+    TLSLeaf --> CertCheck
+    TLSKey --> CertCheck
+    CACert --> ChainCheck
+    AdminSecret --> SecretCheck
+    DBSecret --> SecretCheck
+    RegistryCreds --> EphemeralDockerConfig
+    CertCheck --> HarborTLS
+    ChainCheck --> DockerTrust
+    ChainCheck --> ContainerdTrust
+    EphemeralDockerConfig --> TarExcludes
+
+    style TLSKey fill:#ffebee
+    style AdminSecret fill:#ffebee
+    style DBSecret fill:#ffebee
+    style HarborTLS fill:#e8f5e9

@@ -1,0 +1,52 @@
+flowchart TB
+    subgraph cluster_1_Staging["Internet-Connected Staging Host"]
+        StageRepo["kubeharbor Repo<br/>Deployment Bundle"]
+        DockerRepo["Docker Apt Repo<br/>Engine and Compose Packages"]
+        HarborRelease["Harbor GitHub Release<br/>Offline Installer"]
+        DHIRegistry["Docker Registry<br/>DHI Portal Image"]
+        StageOutput["output/*.tgz<br/>Moveable Air-Gap Bundle"]
+    end
+
+    subgraph cluster_2_Transfer["Controlled Transfer Boundary"]
+        Media["Approved Transfer Media<br/>Tarball + SHA256"]
+        CertInput["Certificate Material<br/>Leaf Cert, Key, CA"]
+    end
+
+    subgraph cluster_3_AirGap["Air-Gapped VM - kubeharbor"]
+        Ubuntu["Ubuntu 24.04 LTS<br/>4 vCPU / 16 GB RAM"]
+        DataDisk["/data<br/>500 GB Data Disk"]
+        DockerEngine["Docker Engine<br/>Docker Compose Plugin"]
+        Harbor["Harbor v2.15.1<br/>Registry Services"]
+        Systemd["harbor.service<br/>Serial Startup Wrapper"]
+        ImageTransfer["Image Transfer Cache<br/>/data/kubeharbor-image-transfer"]
+    end
+
+    subgraph cluster_4_Consumers["Registry Consumers"]
+        AdminClient["Admin Workstation<br/>docker login/push/pull"]
+        RKE2Nodes["RKE2/containerd Nodes<br/>registries.yaml Trust"]
+        PlatformBundles["Platform Bundles<br/>Rancher, Argo CD, Istio, Monitoring"]
+    end
+
+    StageRepo --> DockerRepo
+    StageRepo --> HarborRelease
+    StageRepo --> DHIRegistry
+    DockerRepo --> StageOutput
+    HarborRelease --> StageOutput
+    DHIRegistry --> StageOutput
+    StageOutput --> Media
+    Media --> Ubuntu
+    CertInput --> Ubuntu
+    Ubuntu --> DataDisk
+    Ubuntu --> DockerEngine
+    DockerEngine --> Harbor
+    Harbor --> Systemd
+    DockerEngine --> ImageTransfer
+    AdminClient --> Harbor
+    RKE2Nodes --> Harbor
+    PlatformBundles --> ImageTransfer
+    ImageTransfer --> Harbor
+
+    style Harbor fill:#e8f5e9
+    style DataDisk fill:#e3f2fd
+    style Media fill:#fff3e0
+    style CertInput fill:#ffebee

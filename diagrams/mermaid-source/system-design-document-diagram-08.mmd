@@ -1,0 +1,21 @@
+flowchart TB
+    Systemd["systemctl start harbor"]
+    Wrapper["/usr/local/sbin/harbor-start-serial.sh"]
+    ComposeDown["docker compose down -v<br/>during install path"]
+    StartLog["docker compose up -d log"]
+    WaitLog["Wait for 127.0.0.1:1514"]
+    StartAll["docker compose up -d"]
+    VerifyPS["docker compose ps"]
+    ApiPing["HTTPS API Ping<br/>/api/v2.0/ping"]
+
+    Systemd --> Wrapper
+    Wrapper --> StartLog
+    ComposeDown -.Install flow only.-> StartLog
+    StartLog --> WaitLog
+    WaitLog --> StartAll
+    StartAll --> VerifyPS
+    VerifyPS --> ApiPing
+
+    style StartLog fill:#fff3e0
+    style StartAll fill:#e8f5e9
+    style ApiPing fill:#e8f5e9

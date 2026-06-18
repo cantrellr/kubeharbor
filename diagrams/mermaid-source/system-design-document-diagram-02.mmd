@@ -1,0 +1,27 @@
+flowchart TB
+    subgraph cluster_1_VM["kubeharbor VM"]
+        Compute["Compute<br/>4 vCPU / 16 GB RAM"]
+        OS["OS Disk<br/>64 GB Ubuntu 24.04"]
+        Data["Data Disk<br/>500 GB mounted at /data"]
+        Network["Network Identity<br/>kubeharbor.dev.kube"]
+    end
+
+    subgraph cluster_2_DataPaths["/data Storage Consumers"]
+        HarborData["Harbor Data<br/>registry, database, job logs"]
+        DockerData["Docker Data Root<br/>/data/docker"]
+        ContainerdData["containerd Root<br/>/data/containerd"]
+        TransferData["Image Transfer Root<br/>/data/kubeharbor-image-transfer"]
+    end
+
+    Compute --> OS
+    Compute --> Data
+    Network --> Compute
+    Data --> HarborData
+    Data --> DockerData
+    Data --> ContainerdData
+    Data --> TransferData
+
+    style Data fill:#e3f2fd
+    style HarborData fill:#e8f5e9
+    style DockerData fill:#e8f5e9
+    style TransferData fill:#fff3e0

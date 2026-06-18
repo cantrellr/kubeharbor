@@ -1,0 +1,37 @@
+flowchart TB
+    subgraph cluster_1_InternetVM["Internet-Connected kubeharbor VM"]
+        InstallBundle["Install kubeharbor Bundle"]
+        ImageZip["image-airgap-bundle-updated.zip"]
+        ExtractUtility["tools/install-image-airgap-bundle.sh"]
+        PullUtility["tools/pull-images-to-data-cache.sh"]
+        LocalCache["Local Docker Cache<br/>/data/docker"]
+        PullLogs["Pull Logs<br/>/data/kubeharbor-image-transfer/logs"]
+    end
+
+    subgraph cluster_2_CloneMove["Clone / Re-IP / Move"]
+        VMClone["VM Clone Carries /data<br/>Docker Cache + Registry Data"]
+        AirGapNetwork["Air-Gapped Network"]
+    end
+
+    subgraph cluster_3_AirGapPromotion["Air-Gapped Promotion"]
+        HarborTarget["kubeharbor.dev.kube/library"]
+        PushUtility["tools/push-data-cache-to-harbor.sh"]
+        PushLogs["Push Logs<br/>failed and missing lists"]
+        PullTest["Representative docker pull Test"]
+    end
+
+    InstallBundle --> ImageZip
+    ImageZip --> ExtractUtility
+    ExtractUtility --> PullUtility
+    PullUtility --> LocalCache
+    PullUtility --> PullLogs
+    LocalCache --> VMClone
+    VMClone --> AirGapNetwork
+    AirGapNetwork --> PushUtility
+    PushUtility --> HarborTarget
+    PushUtility --> PushLogs
+    HarborTarget --> PullTest
+
+    style LocalCache fill:#e3f2fd
+    style HarborTarget fill:#e8f5e9
+    style PushLogs fill:#fff3e0

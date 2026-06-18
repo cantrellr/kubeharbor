@@ -1,0 +1,51 @@
+flowchart TB
+    subgraph cluster_1_Entry["External Entry"]
+        Browser["Browser / API Client"]
+        DockerClient["Docker Client<br/>push/pull/login"]
+        K8sClient["RKE2/containerd Node"]
+    end
+
+    subgraph cluster_2_HarborHost["kubeharbor Runtime Host"]
+        Proxy["proxy<br/>HTTPS 443 / HTTP 80"]
+        Core["core<br/>API and Auth Logic"]
+        Portal["portal<br/>Web UI"]
+        Registry["registry<br/>OCI Blob Store API"]
+        RegistryCtl["registryctl<br/>Registry Control"]
+        JobService["jobservice<br/>Async Jobs"]
+        Postgres["postgresql<br/>Metadata DB"]
+        Redis["redis<br/>Cache and Queue"]
+        LogSvc["log<br/>127.0.0.1:1514"]
+        Trivy["trivy<br/>Optional Offline Scanner"]
+    end
+
+    subgraph cluster_3_PersistentState["Persistent State under /data"]
+        RegistryData["Registry Blobs"]
+        DBData["PostgreSQL Data"]
+        JobLogs["Job Logs"]
+        DockerCache["Docker Image Cache"]
+    end
+
+    Browser --> Proxy
+    DockerClient --> Proxy
+    K8sClient --> Proxy
+    Proxy --> Core
+    Proxy --> Portal
+    Proxy --> Registry
+    Core --> Postgres
+    Core --> Redis
+    Core --> RegistryCtl
+    RegistryCtl --> Registry
+    JobService --> Core
+    JobService --> Redis
+    JobService --> Postgres
+    Registry --> RegistryData
+    Postgres --> DBData
+    JobService --> JobLogs
+    LogSvc --> JobLogs
+    Trivy -.Optional.-> Core
+    DockerCache -.Local host cache.-> Registry
+
+    style Proxy fill:#e8f5e9
+    style Registry fill:#e8f5e9
+    style Postgres fill:#e3f2fd
+    style LogSvc fill:#fff3e0
