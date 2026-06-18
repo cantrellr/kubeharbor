@@ -52,8 +52,6 @@ mkdir -p diagrams/mermaid-source diagrams/svg diagrams/png docs
 # Keep source-of-truth Mermaid files, rendered assets, Markdown, and indexes aligned.
 "${SCRIPT_DIR}/render-mermaid-assets.sh" --repo "${REPO_DIR}" --sync-index "$@"
 
-git status --short
-
 # Stage the complete sync unit, including generated diagram assets and Markdown
 # files touched by sync-mermaid-markdown.py.
 git add \
@@ -64,12 +62,17 @@ git add \
   diagrams/DIAGRAM-INDEX.json \
   diagrams/DIAGRAM-SYNC-REPORT.md
 
+# sync-mermaid-markdown.py writes a temporary list of Markdown files it updated.
+# Stage those files, then remove the scratch file before displaying status so
+# operators do not see misleading untracked-file noise after a successful sync.
 if [[ -s .diagram-sync-updated-files.txt ]]; then
   while IFS= read -r file_path; do
     [[ -n "${file_path}" ]] && git add "${file_path}"
   done < .diagram-sync-updated-files.txt
 fi
 rm -f .diagram-sync-updated-files.txt
+
+git status --short
 
 if git diff --cached --quiet; then
   echo "No changes staged. The repository is already synchronized."
