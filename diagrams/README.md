@@ -40,6 +40,30 @@ After dependencies are installed, use:
 ./diagrams/apply-diagram-updates.sh .
 ```
 
+Do **not** run the wrapper with `sudo`. The render operation should run as your normal user. Running the wrapper with `sudo` can hide user-scoped Node.js installs and can leave generated files owned by root.
+
+## Browser shared-library dependencies
+
+Mermaid CLI uses Puppeteer/Chrome to render SVG and PNG files. On minimal Ubuntu or WSL installs, Puppeteer may fail with a missing library error such as:
+
+```text
+error while loading shared libraries: libnspr4.so: cannot open shared object file
+```
+
+Install the browser dependencies through the repo script:
+
+```bash
+./diagrams/apply-diagram-updates.sh . --install-browser-deps
+```
+
+Then rerun the normal sync:
+
+```bash
+./diagrams/apply-diagram-updates.sh .
+```
+
+The browser dependency installer uses `sudo` only for `apt-get`. The renderer itself still runs as your normal user.
+
 ## Render only
 
 Use the lower-level renderer when you want to generate SVG/PNG files without automatically staging and committing the full sync unit.
@@ -59,6 +83,9 @@ Use the lower-level renderer when you want to generate SVG/PNG files without aut
 
 # Render larger PNG files.
 ./diagrams/render-mermaid-assets.sh --repo . --scale 3 --sync-index
+
+# Install Mermaid CLI and browser shared-library dependencies in one run.
+./diagrams/apply-diagram-updates.sh . --install-deps --install-browser-deps
 ```
 
 ## Dependency model
@@ -70,6 +97,8 @@ The renderer looks for Mermaid CLI in this order:
 3. `mmdc` from `PATH`
 
 Use `--install-deps` when Mermaid CLI is not already available.
+
+The renderer also preflights the Puppeteer Chrome binary with `ldd` when a browser binary exists under the Puppeteer cache. If shared libraries are missing, the script fails before the render loop and tells the operator to rerun with `--install-browser-deps`.
 
 ## Operator contract
 
