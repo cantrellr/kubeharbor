@@ -1,4 +1,4 @@
-# kubeharbor Docker air-gap deployment bundle
+# kubeHarbor Docker -- Air-Gap Deployment Bundle
 
 This bundle deploys Harbor on a single Ubuntu 24.04 LTS VM named `kubeharbor` using Docker Engine and the Docker Compose plugin.
 
