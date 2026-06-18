@@ -8,9 +8,9 @@ flowchart TB
 
     subgraph cluster_2_DataPaths["/data Storage Consumers"]
         HarborData["Harbor Data<br/>registry, database, job logs"]
-        DockerData["Docker Data Root<br/>/data/docker"]
-        ContainerdData["containerd Root<br/>/data/containerd"]
-        TransferData["Image Transfer Root<br/>/data/kubeharbor-image-transfer"]
+        DockerData["Docker Data<br/>/data/docker"]
+        ContainerdData["containerd Data<br/>/data/containerd"]
+        TransferData["k8s-airgap-images<br/>/data/k8s-airgap-images"]
     end
 
     Compute --> OS
