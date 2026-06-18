@@ -1,8 +1,8 @@
 # kubeharbor System Design Document
 
 **Reference Architecture Environment**  
-**Version:** 1.1  
-**Date:** June 17, 2026
+**Version:** 1.2  
+**Date:** June 18, 2026
 
 ---
 
@@ -23,26 +23,31 @@
 13. [Operations Architecture](#operations-architecture)
 14. [Failure Modes and Recovery](#failure-modes-and-recovery)
 15. [Hardening and Improvement Roadmap](#hardening-and-improvement-roadmap)
-16. [Appendices](#appendices)
+16. [Documentation and Diagram Governance](#documentation-and-diagram-governance)
+17. [Appendices](#appendices)
 
 ---
 
 ## Executive Summary
 
-`kubeharbor` is a Docker-based, single-node Harbor deployment bundle for an Ubuntu 24.04 LTS virtual machine operating as an internal container registry for air-gapped Kubernetes and platform engineering workflows. The design goal is to build a deterministic Harbor host that can be staged on an Internet-connected system, transported into an isolated environment, and used as the upstream registry for RKE2, Rancher, Argo CD, Istio, monitoring, and related platform image promotion.
+`kubeharbor` is a Docker-based, single-node Harbor deployment bundle for an Ubuntu 24.04 LTS virtual machine operating as an internal container registry for air-gapped Kubernetes and platform engineering workflows. The design goal is straightforward: build a deterministic Harbor host that can be staged on an Internet-connected system, transported into an isolated environment, and used as the upstream registry for RKE2, Rancher, Argo CD, Istio, monitoring, and related platform image promotion.
 
-This is not a high-availability Harbor architecture. That is a design constraint, not a detail. The VM is a critical platform dependency, and if it is offline, downstream cluster lifecycle operations will feel it immediately. The architecture compensates with predictable installation, explicit artifact validation, `/data`-backed Docker/containerd storage, systemd-managed lifecycle hooks, clean operational runbooks, and a large-image pull/push workflow designed for air-gapped promotion.
+This is not a high-availability Harbor architecture. That is not a footnote; it is the primary design constraint. The VM is a platform dependency. If it is offline, downstream cluster lifecycle work gets painful quickly. The architecture compensates with predictable installation, explicit artifact validation, `/data`-backed Docker/containerd storage, systemd-managed lifecycle hooks, operational runbooks, and a large-image pull/push workflow designed for air-gapped promotion.
 
 ### Key Characteristics
 
 - **Single-node Harbor registry** deployed on Ubuntu 24.04 LTS.
-- **Docker Engine and Docker Compose plugin runtime** installed from local `.deb` packages.
+- **Docker Engine and Docker Compose plugin runtime** installed from local `.deb` packages for air-gap compatibility.
 - **Harbor v2.15.1 offline installer** staged from an Internet-connected host.
-- **TLS-first registry access** using the `kubeharbor.dev.kube` hostname.
-- **500 GB `/data` storage model** for Harbor data, Docker image cache, containerd content, and image transfer workflows.
+- **TLS-first registry access** using the `kubeharbor.dev.kube` hostname and locally staged certificate material.
+- **500 GB `/data` storage model** for Harbor data, Docker image cache, containerd content, and bulk image transfer workflows.
 - **Optional Docker Hardened Image portal override** that swaps only the Harbor `portal` service after the official Harbor installer renders Compose assets.
 - **Checksum-enforced artifact intake** for Docker packages, Harbor installer, and saved extra image archives.
-- **Diagram exports** maintained under `diagrams/mermaid-source`, `diagrams/svg`, and `diagrams/png` so the Markdown and external image assets stay aligned.
+- **Local Mermaid diagram asset pipeline** that maintains Markdown diagrams, `.mmd` source, SVG exports, PNG exports, and diagram indexes without GitHub Actions.
+
+### Business and Mission Value
+
+The registry is a control point for software supply-chain continuity in disconnected environments. It reduces repeated Internet dependency, establishes a consistent internal image namespace, and gives platform operators a repeatable staging path for large Kubernetes application stacks. In enterprise terms, kubeharbor is an enablement layer: it does not run the mission workload, but the mission workload deployment pipeline depends on it.
 
 ---
 
@@ -50,12 +55,745 @@ This is not a high-availability Harbor architecture. That is a design constraint
 
 The kubeharbor design separates the system into four practical domains:
 
-1. **Internet-connected staging domain** that downloads Docker packages, the Harbor offline installer, and any required extra image archives.
+1. **Internet-connected staging domain** that downloads Docker packages, the Harbor offline installer, and required extra image archives.
 2. **Transfer package domain** that bundles verified artifacts into a moveable tarball while excluding secrets and runtime byproducts.
 3. **Air-gapped Harbor runtime domain** where Docker, Harbor, certificates, storage, and lifecycle services are installed.
 4. **Consumer/client domain** made up of Kubernetes nodes, admin workstations, and image promotion utilities that push to or pull from the registry.
 
+The diagram format intentionally follows the same Mermaid convention used by the `k8s-mystical-mesh-documents` system design document: inline `flowchart TB`, named `cluster_*` subgraphs, HTML line breaks in labels, and explicit `style` declarations for architectural emphasis.
+
 ### Architecture Diagram
+
+```mermaid
+flowchart TB
+    subgraph cluster_1_Staging["Internet-Connected Staging Host"]
+        StageRepo["kubeharbor Repo<br/>Deployment Bundle"]
+        DockerRepo["Docker Apt Repo<br/>Engine and Compose Packages"]
+        HarborRelease["Harbor GitHub Release<br/>Offline Installer"]
+        DHIRegistry["Docker Registry<br/>DHI Portal Image"]
+        StageOutput["output/*.tgz<br/>Moveable Air-Gap Bundle"]
+    end
+
+    subgraph cluster_2_Transfer["Controlled Transfer Boundary"]
+        Media["Approved Transfer Media<br/>Tarball + SHA256"]
+        CertInput["Certificate Material<br/>Leaf Cert, Key, CA"]
+    end
+
+    subgraph cluster_3_AirGap["Air-Gapped VM - kubeharbor"]
+        Ubuntu["Ubuntu 24.04 LTS<br/>4 vCPU / 16 GB RAM"]
+        DataDisk["/data<br/>500 GB Data Disk"]
+        DockerEngine["Docker Engine<br/>Docker Compose Plugin"]
+        Harbor["Harbor v2.15.1<br/>Registry Services"]
+        Systemd["harbor.service<br/>Serial Startup Wrapper"]
+        ImageTransfer["Image Transfer Cache<br/>/data/kubeharbor-image-transfer"]
+    end
+
+    subgraph cluster_4_Consumers["Registry Consumers"]
+        AdminClient["Admin Workstation<br/>docker login/push/pull"]
+        RKE2Nodes["RKE2/containerd Nodes<br/>registries.yaml Trust"]
+        PlatformBundles["Platform Bundles<br/>Rancher, Argo CD, Istio, Monitoring"]
+    end
+
+    StageRepo --> DockerRepo
+    StageRepo --> HarborRelease
+    StageRepo --> DHIRegistry
+    DockerRepo --> StageOutput
+    HarborRelease --> StageOutput
+    DHIRegistry --> StageOutput
+    StageOutput --> Media
+    Media --> Ubuntu
+    CertInput --> Ubuntu
+    Ubuntu --> DataDisk
+    Ubuntu --> DockerEngine
+    DockerEngine --> Harbor
+    Harbor --> Systemd
+    DockerEngine --> ImageTransfer
+    AdminClient --> Harbor
+    RKE2Nodes --> Harbor
+    PlatformBundles --> ImageTransfer
+    ImageTransfer --> Harbor
+
+    style Harbor fill:#e8f5e9
+    style DataDisk fill:#e3f2fd
+    style Media fill:#fff3e0
+    style CertInput fill:#ffebee
+```
+
+> Diagram export: [SVG](../diagrams/svg/system-design-document-diagram-01.svg) | [PNG](../diagrams/png/system-design-document-diagram-01.png)
+
+---
+
+## Architecture Principles
+
+### Deterministic First, Convenient Second
+
+The bundle prioritizes repeatability over cleverness. Installation order is explicit, version checks are enforced, checksums are validated, and Harbor service startup is serialized to avoid logger bootstrap races. In an air-gapped environment, failed installs are expensive to unwind because packages and images cannot be fetched on demand.
+
+### Keep Heavy State off the OS Disk
+
+The VM has a 64 GB OS disk and a 500 GB data disk. Docker image pulls, containerd content, Harbor registry blobs, and image transfer logs must live under `/data`. Allowing large image workflows to land under `/var/lib/docker` is a self-inflicted outage.
+
+### Fail Fast Before Mutating the Runtime
+
+Preflight checks block common deployment killers before the installer gets deep into Harbor state changes: missing settings, weak or placeholder passwords, missing certificates, TLS SAN mismatch, Harbor version mismatch, checksum mismatch, missing data mount, and invalid DHI portal combinations.
+
+### Prefer Explicit Air-Gap Boundaries
+
+The repository separates Internet-side artifact acquisition from air-gapped installation. The staging script builds the moveable package. The air-gapped VM consumes it. The image transfer workflow can either use a clone-and-promote model or push directly from a prepared cache.
+
+### Treat Secrets as Inputs, Not Repo Assets
+
+Production TLS keys, Docker credentials, and registry credentials are operator-provided inputs. They are not durable repository assets. The scripts should prompt, consume, validate, and remove temporary credential state where practical.
+
+---
+
+## Infrastructure Baseline
+
+| Layer | Baseline |
+| --- | --- |
+| VM name | `kubeharbor` |
+| FQDN | `kubeharbor.dev.kube` |
+| OS | Ubuntu 24.04 LTS amd64 |
+| CPU | 4 vCPU minimum target |
+| Memory | 16 GB target |
+| OS disk | 64 GB |
+| Data disk | 500 GB mounted at `/data` |
+| Container runtime | Docker Engine + Docker Compose plugin |
+| Harbor version | `v2.15.1` |
+| Harbor install path | `/opt/harbor` |
+| Harbor data path | `/data` |
+| Docker data root | `/data/docker` |
+| containerd root | `/data/containerd` |
+| Image transfer root | `/data/kubeharbor-image-transfer` |
+| TLS hostname | `kubeharbor.dev.kube` |
+| Lifecycle unit | `harbor.service` |
+
+### Target VM Resource View
+
+```mermaid
+flowchart TB
+    subgraph cluster_1_VM["kubeharbor VM"]
+        Compute["Compute<br/>4 vCPU / 16 GB RAM"]
+        OS["OS Disk<br/>64 GB Ubuntu 24.04"]
+        Data["Data Disk<br/>500 GB mounted at /data"]
+        Network["Network Identity<br/>kubeharbor.dev.kube"]
+    end
+
+    subgraph cluster_2_DataPaths["/data Storage Consumers"]
+        HarborData["Harbor Data<br/>registry, database, job logs"]
+        DockerData["Docker Data Root<br/>/data/docker"]
+        ContainerdData["containerd Root<br/>/data/containerd"]
+        TransferData["Image Transfer Root<br/>/data/kubeharbor-image-transfer"]
+    end
+
+    Compute --> OS
+    Compute --> Data
+    Network --> Compute
+    Data --> HarborData
+    Data --> DockerData
+    Data --> ContainerdData
+    Data --> TransferData
+
+    style Data fill:#e3f2fd
+    style HarborData fill:#e8f5e9
+    style DockerData fill:#e8f5e9
+    style TransferData fill:#fff3e0
+```
+
+> Diagram export: [SVG](../diagrams/svg/system-design-document-diagram-02.svg) | [PNG](../diagrams/png/system-design-document-diagram-02.png)
+
+---
+
+## Repository and Bundle Layout
+
+The repository is structured as an air-gap deployment package rather than a traditional application source tree.
+
+| Path | Purpose |
+| --- | --- |
+| `install.sh` | Top-level orchestrator for the air-gapped install flow. |
+| `config/harbor.env` | Operator-editable deployment settings and feature toggles. |
+| `config/harbor.yml.template` | Golden Harbor configuration template rendered into `/opt/harbor/harbor.yml`. |
+| `certs/` | Local staging location for TLS leaf certificate, key, and CA certificate. |
+| `installers/` | Harbor offline installer tarball and checksum file. |
+| `packages/docker-debs/` | Offline Docker Engine, CLI, containerd, Buildx, Compose plugin, and dependencies. |
+| `images/` | Saved Docker image archives, including the optional DHI Harbor portal image. |
+| `scripts/` | Air-gapped install, validation, lifecycle, backup, reset, and client trust scripts. |
+| `systemd/harbor.service` | Host lifecycle unit for Harbor Compose stack startup/shutdown. |
+| `tools/` | Internet-side artifact downloader, cleanup utility, and large-image transfer wrappers. |
+| `docs/` | Operator-facing documentation, runbooks, hardening notes, and design documentation. |
+| `diagrams/` | Mermaid source files, SVG/PNG exports, and diagram sync utilities. |
+
+### Repository Execution Model
+
+```mermaid
+flowchart TB
+    subgraph cluster_1_Config["Configuration Inputs"]
+        EnvFile["config/harbor.env"]
+        Template["config/harbor.yml.template"]
+        Certs["certs/*.crt<br/>certs/*.key"]
+    end
+
+    subgraph cluster_2_Orchestration["Install Orchestration"]
+        Install["install.sh"]
+        Disk["00-prepare-data-disk.sh"]
+        Preflight["01-preflight.sh"]
+        DockerInstall["02-install-docker-offline.sh"]
+        LoadImages["03-load-extra-images.sh"]
+        StageHarbor["04-stage-harbor-offline-installer.sh"]
+        Render["05-render-harbor-yml.sh"]
+        HarborInstall["06-install-harbor.sh"]
+        DHI["07-optional-use-dhi-portal.sh"]
+        Verify["10-verify.sh"]
+    end
+
+    subgraph cluster_3_Runtime["Runtime Outputs"]
+        DockerDaemon["/etc/docker/daemon.json"]
+        ContainerdConfig["/etc/containerd/config.toml"]
+        HarborYml["/opt/harbor/harbor.yml"]
+        Compose["/opt/harbor/docker-compose.yml"]
+        HarborSvc["/etc/systemd/system/harbor.service"]
+    end
+
+    EnvFile --> Install
+    Template --> Render
+    Certs --> Preflight
+    Install --> Disk
+    Disk --> Preflight
+    Preflight --> DockerInstall
+    DockerInstall --> LoadImages
+    LoadImages --> StageHarbor
+    StageHarbor --> Render
+    Render --> HarborInstall
+    HarborInstall --> DHI
+    DHI --> Verify
+    DockerInstall --> DockerDaemon
+    DockerInstall --> ContainerdConfig
+    Render --> HarborYml
+    HarborInstall --> Compose
+    HarborInstall --> HarborSvc
+
+    style Preflight fill:#fff3e0
+    style Verify fill:#e8f5e9
+    style Certs fill:#ffebee
+```
+
+> Diagram export: [SVG](../diagrams/svg/system-design-document-diagram-03.svg) | [PNG](../diagrams/png/system-design-document-diagram-03.png)
+
+---
+
+## Component Deep Dive
+
+### `install.sh` Orchestrator
+
+`install.sh` is the control-plane entry point for the air-gapped VM. It sources `config/harbor.env`, exports the settings required by child scripts, and runs the install pipeline in a fixed sequence:
+
+1. Prepare or validate the data disk.
+2. Run preflight checks.
+3. Install Docker from offline packages or validate existing Docker.
+4. Load extra image archives.
+5. Stage the Harbor offline installer.
+6. Render `harbor.yml`.
+7. Install and start Harbor.
+8. Optionally apply the DHI portal override.
+9. Verify the final runtime.
+
+This is the right call for the target environment. Parallelism would make logs noisier and failure correlation worse. Air-gapped installers should be boring.
+
+### `config/harbor.env`
+
+`config/harbor.env` is the deployment contract. It defines the hostname, ports, Harbor version, data paths, TLS source and destination paths, Docker/containerd storage roots, DHI portal settings, firewall behavior, and image transfer root.
+
+Before a production-like install, rotate `HARBOR_ADMIN_PASSWORD` and `HARBOR_DB_PASSWORD`, keep them out of Git history where possible, and store them in an approved secret escrow process.
+
+### `config/harbor.yml.template`
+
+The Harbor template is rendered into `/opt/harbor/harbor.yml`. It contains the external hostname, HTTP/HTTPS ports, TLS file paths, admin and database settings, data volume, Trivy offline settings, jobservice tuning, log rotation behavior, proxy placeholders, upload purge policy, and Harbor configuration version.
+
+### Offline Docker Runtime
+
+The bundle installs Docker Engine and Docker Compose plugin from local `.deb` files. The runtime design configures Docker `data-root` under `/data/docker`, uses the `overlay2` storage driver, enables Docker `live-restore`, applies Docker log rotation, and supports containerd storage under `/data/containerd`.
+
+### Harbor Runtime Components
+
+| Service | Function |
+| --- | --- |
+| `proxy` | External HTTPS/HTTP entry point for Harbor UI, API, and registry traffic. |
+| `core` | Harbor API, authentication integration, metadata, and project logic. |
+| `portal` | Web UI static content service. Optionally replaced with DHI portal image. |
+| `registry` | OCI/Docker distribution registry backend. |
+| `registryctl` | Registry controller sidecar for Harbor registry operations. |
+| `jobservice` | Asynchronous job execution for replication, garbage collection, scanning jobs, and task processing. |
+| `postgresql` | Harbor metadata database. |
+| `redis` | Cache and job coordination backend. |
+| `log` | Local syslog/log collector used by the Harbor Compose stack. |
+| `trivy` | Optional vulnerability scanner; disabled by default unless offline DB lifecycle is handled. |
+
+### Optional DHI Portal Override
+
+The DHI portal override is deliberately narrow. It does not replace the full Harbor stack. It only swaps the `portal` service image after the official installer generates `docker-compose.yml` and the default Harbor portal Nginx config.
+
+The override script confirms the DHI toggle, validates the image exists locally, backs up generated files, patches the portal Nginx config for DHI's 8080/non-root runtime model, changes only the portal service image, validates the Compose and Nginx configurations, recreates only the portal service, and rolls back automatically if validation or health gating fails.
+
+---
+
+## Deployment Architecture
+
+### End-to-End Deployment Flow
+
+```mermaid
+flowchart TB
+    subgraph cluster_1_Internet["Internet-Connected Build/Staging Phase"]
+        CloneRepo["Clone kubeharbor Repo"]
+        RunDownloader["Run tools/download-airgap-artifacts-on-internet-host.sh"]
+        PullDHI["Pull DHI Portal Image"]
+        SaveDHI["docker save DHI Image<br/>images/*.tar"]
+        DownloadDocker["Download Docker .deb Packages"]
+        DownloadHarbor["Download Harbor Offline Installer"]
+        Checksums["Generate SHA256SUMS"]
+        Package["Create output/kubeharbor-airgap-*.tgz"]
+    end
+
+    subgraph cluster_2_AirGapInstall["Air-Gapped Installation Phase"]
+        Extract["Extract Air-Gap Bundle"]
+        StageCerts["Stage TLS Certs into certs/"]
+        EditEnv["Edit config/harbor.env"]
+        RunInstall["sudo ./install.sh"]
+        Validate["scripts/10-verify.sh"]
+    end
+
+    CloneRepo --> RunDownloader
+    RunDownloader --> DownloadDocker
+    RunDownloader --> DownloadHarbor
+    RunDownloader --> PullDHI
+    PullDHI --> SaveDHI
+    DownloadDocker --> Checksums
+    DownloadHarbor --> Checksums
+    SaveDHI --> Checksums
+    Checksums --> Package
+    Package --> Extract
+    Extract --> StageCerts
+    StageCerts --> EditEnv
+    EditEnv --> RunInstall
+    RunInstall --> Validate
+
+    style RunInstall fill:#e8f5e9
+    style Checksums fill:#fff3e0
+    style StageCerts fill:#ffebee
+```
+
+> Diagram export: [SVG](../diagrams/svg/system-design-document-diagram-04.svg) | [PNG](../diagrams/png/system-design-document-diagram-04.png)
+
+### Air-Gapped Install Sequence
+
+```mermaid
+flowchart TB
+    Start["Operator Runs<br/>sudo ./install.sh"]
+    SourceEnv["Source config/harbor.env"]
+    DiskCheck["Prepare/Validate /data"]
+    Preflight["Validate Settings, Certs,<br/>Checksums, Version Alignment"]
+    DockerPath{"INSTALL_DOCKER=true?"}
+    InstallDocker["Install Docker from<br/>packages/docker-debs"]
+    ValidateDocker["Validate Existing Docker<br/>and Compose"]
+    LoadImages["Load Extra Image Archives"]
+    StageInstaller["Extract Harbor Offline Installer<br/>to /opt/harbor"]
+    RenderConfig["Render /opt/harbor/harbor.yml"]
+    InstallHarbor["Run Harbor Prepare<br/>Serial Log Bootstrap"]
+    DHIPath{"USE_DHI_HARBOR_PORTAL=true?"}
+    ApplyDHI["Patch and Recreate Portal<br/>with DHI Image"]
+    KeepOfficial["Keep Official Portal Image"]
+    Verify["Verify Services and API"]
+    Success["Deployment Complete"]
+
+    Start --> SourceEnv
+    SourceEnv --> DiskCheck
+    DiskCheck --> Preflight
+    Preflight --> DockerPath
+    DockerPath -- Yes --> InstallDocker
+    DockerPath -- No --> ValidateDocker
+    InstallDocker --> LoadImages
+    ValidateDocker --> LoadImages
+    LoadImages --> StageInstaller
+    StageInstaller --> RenderConfig
+    RenderConfig --> InstallHarbor
+    InstallHarbor --> DHIPath
+    DHIPath -- Yes --> ApplyDHI
+    DHIPath -- No --> KeepOfficial
+    ApplyDHI --> Verify
+    KeepOfficial --> Verify
+    Verify --> Success
+
+    style Preflight fill:#fff3e0
+    style InstallHarbor fill:#e8f5e9
+    style ApplyDHI fill:#e3f2fd
+    style Success fill:#e8f5e9
+```
+
+> Diagram export: [SVG](../diagrams/svg/system-design-document-diagram-05.svg) | [PNG](../diagrams/png/system-design-document-diagram-05.png)
+
+---
+
+## Air-Gap Artifact Supply Chain
+
+The artifact supply chain is intentionally split so the Internet-connected system does all external retrieval while the air-gapped VM only performs local validation and installation.
+
+| Artifact | Source | Destination | Validation |
+| --- | --- | --- | --- |
+| Docker `.deb` packages | Docker apt repository and dependencies | `packages/docker-debs/` | Local `SHA256SUMS` file |
+| Harbor offline installer | Harbor release asset | `installers/` | Filename/version check and `SHA256SUMS` |
+| DHI portal image | Docker registry | `images/*.tar` | `docker save`, inspect JSON, and `SHA256SUMS` |
+| TLS leaf cert/key/CA | Operator-provided secure path | `certs/` on target | OpenSSL readability, key match, SAN/CN, optional CA chain |
+| Large platform images | Image list bundle workflow | `/data/docker` cache and Harbor registry | Pull/push logs and representative pull tests |
+
+### Artifact Integrity Flow
+
+```mermaid
+flowchart TB
+    subgraph cluster_1_Downloads["Downloaded Artifacts"]
+        Debs["Docker Packages<br/>*.deb"]
+        HarborInstaller["Harbor Offline Installer<br/>harbor-offline-installer-v2.15.1.tgz"]
+        ImageTar["DHI Image Archive<br/>images/*.tar"]
+    end
+
+    subgraph cluster_2_Metadata["Integrity Metadata"]
+        DebSums["packages/docker-debs/SHA256SUMS"]
+        HarborSums["installers/SHA256SUMS"]
+        ImageSums["images/SHA256SUMS"]
+        Artifacts["ARTIFACTS.txt<br/>Inventory"]
+    end
+
+    subgraph cluster_3_Preflight["Air-Gap Preflight Gate"]
+        CheckDebs["Verify Docker Package Checksums"]
+        CheckHarbor["Verify Installer Checksum<br/>and Version Match"]
+        CheckImages["Verify Image Archive Checksums"]
+        CheckTLS["Verify TLS Cert/Key/CA"]
+    end
+
+    Debs --> DebSums
+    HarborInstaller --> HarborSums
+    ImageTar --> ImageSums
+    DebSums --> CheckDebs
+    HarborSums --> CheckHarbor
+    ImageSums --> CheckImages
+    Artifacts --> CheckDebs
+    Artifacts --> CheckHarbor
+    Artifacts --> CheckImages
+    CheckDebs --> CheckHarbor
+    CheckHarbor --> CheckImages
+    CheckImages --> CheckTLS
+
+    style CheckTLS fill:#ffebee
+    style CheckHarbor fill:#fff3e0
+    style Artifacts fill:#e3f2fd
+```
+
+> Diagram export: [SVG](../diagrams/svg/system-design-document-diagram-06.svg) | [PNG](../diagrams/png/system-design-document-diagram-06.png)
+
+### Credential Handling
+
+The Internet staging script prompts for Docker registry credentials only when needed to pull private or gated content. It uses an ephemeral Docker configuration directory under `/tmp`, logs out during cleanup, and removes temporary config on exit. Persisting registry credentials under `/root/.docker/config.json` on a staging host is unnecessary risk.
+
+---
+
+## Runtime Architecture
+
+Harbor runs as a Docker Compose application under `/opt/harbor`. The systemd unit wraps startup behavior so operators can use `systemctl start harbor`, while the actual lifecycle remains Compose-based.
+
+### Runtime Component Diagram
+
+```mermaid
+flowchart TB
+    subgraph cluster_1_Entry["External Entry"]
+        Browser["Browser / API Client"]
+        DockerClient["Docker Client<br/>push/pull/login"]
+        K8sClient["RKE2/containerd Node"]
+    end
+
+    subgraph cluster_2_HarborHost["kubeharbor Runtime Host"]
+        Proxy["proxy<br/>HTTPS 443 / HTTP 80"]
+        Core["core<br/>API and Auth Logic"]
+        Portal["portal<br/>Web UI"]
+        Registry["registry<br/>OCI Blob Store API"]
+        RegistryCtl["registryctl<br/>Registry Control"]
+        JobService["jobservice<br/>Async Jobs"]
+        Postgres["postgresql<br/>Metadata DB"]
+        Redis["redis<br/>Cache and Queue"]
+        LogSvc["log<br/>127.0.0.1:1514"]
+        Trivy["trivy<br/>Optional Offline Scanner"]
+    end
+
+    subgraph cluster_3_PersistentState["Persistent State under /data"]
+        RegistryData["Registry Blobs"]
+        DBData["PostgreSQL Data"]
+        JobLogs["Job Logs"]
+        DockerCache["Docker Image Cache"]
+    end
+
+    Browser --> Proxy
+    DockerClient --> Proxy
+    K8sClient --> Proxy
+    Proxy --> Core
+    Proxy --> Portal
+    Proxy --> Registry
+    Core --> Postgres
+    Core --> Redis
+    Core --> RegistryCtl
+    RegistryCtl --> Registry
+    JobService --> Core
+    JobService --> Redis
+    JobService --> Postgres
+    Registry --> RegistryData
+    Postgres --> DBData
+    JobService --> JobLogs
+    LogSvc --> JobLogs
+    Trivy -.Optional.-> Core
+    DockerCache -.Local host cache.-> Registry
+
+    style Proxy fill:#e8f5e9
+    style Registry fill:#e8f5e9
+    style Postgres fill:#e3f2fd
+    style LogSvc fill:#fff3e0
+```
+
+> Diagram export: [SVG](../diagrams/svg/system-design-document-diagram-07.svg) | [PNG](../diagrams/png/system-design-document-diagram-07.png)
+
+### Startup Model
+
+The startup sequence intentionally starts `harbor-log` first, waits for the local listener on `127.0.0.1:1514`, and then starts the remaining Harbor services. This removes a class of startup races where dependent containers try to emit logs before the log service is available.
+
+```mermaid
+flowchart TB
+    Systemd["systemctl start harbor"]
+    Wrapper["/usr/local/sbin/harbor-start-serial.sh"]
+    ComposeDown["docker compose down -v<br/>during install path"]
+    StartLog["docker compose up -d log"]
+    WaitLog["Wait for 127.0.0.1:1514"]
+    StartAll["docker compose up -d"]
+    VerifyPS["docker compose ps"]
+    ApiPing["HTTPS API Ping<br/>/api/v2.0/ping"]
+
+    Systemd --> Wrapper
+    Wrapper --> StartLog
+    ComposeDown -.Install flow only.-> StartLog
+    StartLog --> WaitLog
+    WaitLog --> StartAll
+    StartAll --> VerifyPS
+    VerifyPS --> ApiPing
+
+    style StartLog fill:#fff3e0
+    style StartAll fill:#e8f5e9
+    style ApiPing fill:#e8f5e9
+```
+
+> Diagram export: [SVG](../diagrams/svg/system-design-document-diagram-08.svg) | [PNG](../diagrams/png/system-design-document-diagram-08.png)
+
+---
+
+## Storage Architecture
+
+The storage model is the make-or-break part of this design. Harbor and large image workflows are storage-heavy. The architecture assumes the OS disk is not sized for image acquisition, registry growth, or container runtime content.
+
+| Path | Backing | Owner | Purpose |
+| --- | --- | --- | --- |
+| `/` | 64 GB OS disk | Ubuntu | Operating system, packages, base configs. |
+| `/data` | 500 GB data disk | kubeharbor | Harbor data volume and bulk storage root. |
+| `/data/docker` | `/data` | Docker | Docker image cache, layers, container state. |
+| `/data/containerd` | `/data` | containerd | containerd content/state for Docker Engine modes that use containerd image store. |
+| `/data/kubeharbor-image-transfer` | `/data` | Image transfer utility | Extracted image list bundle, logs, pull/push state. |
+| `/opt/harbor` | OS disk plus references to `/data` | Harbor installer | Harbor binaries, scripts, generated Compose files, rendered config. |
+| `/var/log/harbor` | OS path unless redirected | Harbor logging | Harbor host logs and log rotation location. |
+
+### Data Flow Across Storage Paths
+
+```mermaid
+flowchart TB
+    subgraph cluster_1_OSDisk["64 GB OS Disk"]
+        RootFS["Ubuntu Root Filesystem"]
+        OptHarbor["/opt/harbor<br/>Installer and Compose Assets"]
+        EtcConfig["/etc/docker<br/>/etc/containerd<br/>/etc/systemd"]
+    end
+
+    subgraph cluster_2_DataDisk["500 GB Data Disk mounted at /data"]
+        DataVolume["/data<br/>Harbor data_volume"]
+        DockerRoot["/data/docker<br/>DockerRootDir"]
+        ContainerdRoot["/data/containerd<br/>containerd root"]
+        TransferRoot["/data/kubeharbor-image-transfer<br/>image-airgap utility"]
+    end
+
+    subgraph cluster_3_Workloads["Storage Consumers"]
+        HarborServices["Harbor Compose Services"]
+        DockerPulls["docker pull/save/load"]
+        ImagePromotion["pull/push image promotion"]
+    end
+
+    RootFS --> OptHarbor
+    EtcConfig --> DockerRoot
+    EtcConfig --> ContainerdRoot
+    OptHarbor --> HarborServices
+    HarborServices --> DataVolume
+    DockerPulls --> DockerRoot
+    DockerPulls --> ContainerdRoot
+    ImagePromotion --> TransferRoot
+    ImagePromotion --> DockerRoot
+    ImagePromotion --> DataVolume
+
+    style DataVolume fill:#e3f2fd
+    style DockerRoot fill:#e8f5e9
+    style ContainerdRoot fill:#e8f5e9
+    style RootFS fill:#ffebee
+```
+
+> Diagram export: [SVG](../diagrams/svg/system-design-document-diagram-09.svg) | [PNG](../diagrams/png/system-design-document-diagram-09.png)
+
+### Disk Safety Controls
+
+The data disk preparation script refuses unsafe formatting when the selected device is not a whole disk, appears to be the OS/root disk, or has mounted partitions. A mistaken `/dev/sda` format in an air-gapped registry install is not a learning moment; it is a rebuild.
+
+---
+
+## Security Architecture
+
+Security in kubeharbor is mostly about controlled artifact intake, TLS trust, secret handling, and minimizing preventable runtime drift.
+
+### Security Control Plane
+
+```mermaid
+flowchart TB
+    subgraph cluster_1_Inputs["Security-Sensitive Inputs"]
+        TLSLeaf["Leaf Certificate<br/>kubeharbor.dev.kube.crt"]
+        TLSKey["Private Key<br/>kubeharbor.dev.kube.key"]
+        CACert["CA Certificate<br/>ca.crt"]
+        AdminSecret["Harbor Admin Password"]
+        DBSecret["Harbor DB Password"]
+        RegistryCreds["Docker Registry Credentials<br/>Staging Only"]
+    end
+
+    subgraph cluster_2_Controls["Validation and Handling Controls"]
+        CertCheck["OpenSSL Cert Read<br/>Key Match<br/>SAN/CN Check"]
+        ChainCheck["Optional CA Chain Verify"]
+        SecretCheck["Placeholder and Length Checks"]
+        EphemeralDockerConfig["Ephemeral DOCKER_CONFIG<br/>Removed on Exit"]
+        TarExcludes["Package Excludes<br/>Private Keys, .git, .docker"]
+    end
+
+    subgraph cluster_3_Consumers["Trusted Consumers"]
+        DockerTrust["Docker certs.d Trust"]
+        ContainerdTrust["RKE2/containerd Registry Trust"]
+        HarborTLS["Harbor HTTPS Endpoint"]
+    end
+
+    TLSLeaf --> CertCheck
+    TLSKey --> CertCheck
+    CACert --> ChainCheck
+    AdminSecret --> SecretCheck
+    DBSecret --> SecretCheck
+    RegistryCreds --> EphemeralDockerConfig
+    CertCheck --> HarborTLS
+    ChainCheck --> DockerTrust
+    ChainCheck --> ContainerdTrust
+    EphemeralDockerConfig --> TarExcludes
+
+    style TLSKey fill:#ffebee
+    style AdminSecret fill:#ffebee
+    style DBSecret fill:#ffebee
+    style HarborTLS fill:#e8f5e9
+```
+
+> Diagram export: [SVG](../diagrams/svg/system-design-document-diagram-10.svg) | [PNG](../diagrams/png/system-design-document-diagram-10.png)
+
+### TLS Trust Model
+
+Harbor presents TLS for `kubeharbor.dev.kube`. Docker clients trust the internal CA through `/etc/docker/certs.d/<registry-host>/ca.crt`. RKE2/containerd clients should use their registry trust configuration instead of Docker's trust path.
+
+The preflight check validates that the leaf certificate and key are readable, the key matches the certificate, the certificate contains the configured Harbor hostname in SAN/CN, and the CA verifies the leaf when a CA file is staged.
+
+### Authentication and Authorization
+
+This design covers the registry platform, not full Harbor user/project governance. The baseline uses the local `admin` credential for post-install validation and bootstrap access. Production-like use should separate robot accounts by project or automation domain, avoid shared admin workflows, disable anonymous access unless intentionally required, and rotate robot credentials on a defined cadence.
+
+### Trivy Scanner Posture
+
+Trivy is disabled by default because an air-gapped scanner is only useful when its vulnerability database lifecycle is managed offline. Enabling a scanner without an offline DB update/import process creates false confidence.
+
+---
+
+## Image Promotion Architecture
+
+The image transfer workflow supports the VM clone model and the local-Docker-cache-to-Harbor model.
+
+### Image Transfer Flow
+
+```mermaid
+flowchart TB
+    subgraph cluster_1_InternetVM["Internet-Connected kubeharbor VM"]
+        InstallBundle["Install kubeharbor Bundle"]
+        ImageZip["image-airgap-bundle-updated.zip"]
+        ExtractUtility["tools/install-image-airgap-bundle.sh"]
+        PullUtility["tools/pull-images-to-data-cache.sh"]
+        LocalCache["Local Docker Cache<br/>/data/docker"]
+        PullLogs["Pull Logs<br/>/data/kubeharbor-image-transfer/logs"]
+    end
+
+    subgraph cluster_2_CloneMove["Clone / Re-IP / Move"]
+        VMClone["VM Clone Carries /data<br/>Docker Cache + Registry Data"]
+        AirGapNetwork["Air-Gapped Network"]
+    end
+
+    subgraph cluster_3_AirGapPromotion["Air-Gapped Promotion"]
+        HarborTarget["kubeharbor.dev.kube/library"]
+        PushUtility["tools/push-data-cache-to-harbor.sh"]
+        PushLogs["Push Logs<br/>failed and missing lists"]
+        PullTest["Representative docker pull Test"]
+    end
+
+    InstallBundle --> ImageZip
+    ImageZip --> ExtractUtility
+    ExtractUtility --> PullUtility
+    PullUtility --> LocalCache
+    PullUtility --> PullLogs
+    LocalCache --> VMClone
+    VMClone --> AirGapNetwork
+    AirGapNetwork --> PushUtility
+    PushUtility --> HarborTarget
+    PushUtility --> PushLogs
+    HarborTarget --> PullTest
+
+    style LocalCache fill:#e3f2fd
+    style HarborTarget fill:#e8f5e9
+    style PushLogs fill:#fff3e0
+```
+
+> Diagram export: [SVG](../diagrams/svg/system-design-document-diagram-11.svg) | [PNG](../diagrams/png/system-design-document-diagram-11.png)
+
+### Push Naming Modes
+
+| Mode | Behavior | Example |
+| --- | --- | --- |
+| `strip-registry` | Removes the source registry prefix and pushes under the target prefix. | `docker.io/rancher/rancher:v2.14.2` to `kubeharbor.dev.kube/library/rancher/rancher:v2.14.2` |
+| `preserve-registry` | Preserves the original registry as part of the destination path. | `docker.io/rancher/rancher:v2.14.2` to `kubeharbor.dev.kube/library/docker.io/rancher/rancher:v2.14.2` |
+
+Defaulting to `strip-registry` keeps internal image paths cleaner. Use `preserve-registry` when collision avoidance matters more than path simplicity.
+
+### Harbor Project Dependency
+
+The push workflow assumes the target Harbor project exists. For the default target `kubeharbor.dev.kube/library`, the `library` project must be present and the authenticated user or robot account must have push rights. Harbor will not create arbitrary projects simply because a Docker push path contains a new namespace.
+
+---
+
+## Operations Architecture
+
+### Day-0 Operations
+
+Day-0 work includes staging artifacts, transferring the bundle, installing Harbor, validating API health, configuring client CA trust, and performing a push/pull smoke test.
+
+### Day-1 Operations
+
+Day-1 work includes confirming `harbor.service` status, reviewing `docker compose ps`, validating `/api/v2.0/ping`, confirming the portal image when the DHI override is enabled, creating projects and robot accounts, and importing CA trust into Docker and RKE2/containerd clients.
+
+### Day-2 Operations
+
+Day-2 work includes backups of `/data` and Harbor metadata, disk utilization reviews, image retention and garbage collection planning, certificate renewal, robot credential rotation, offline vulnerability DB lifecycle if Trivy is enabled, and periodic representative pull tests from downstream cluster nodes.
+
+### Operational Control Flow
 
 ```mermaid
 flowchart TB
@@ -110,6 +848,7 @@ flowchart TB
 | Docker clients see unknown authority | CA not installed on client | `docker login` or pull x509 error | Install CA under Docker or containerd trust path. |
 | Harbor log startup race | Log service not ready before dependent services | Containers restart or logs show connection failures | Use serial startup wrapper and verify `127.0.0.1:1514`. |
 | DHI portal fails | Nginx config/runtime mismatch | DHI override validation or health gate fails | Restore backup, keep official portal, or correct DHI config. |
+| Harbor core DB auth failure after rerun | DB password changed while existing DB state remains | Harbor core logs show Postgres auth failure | Restore original DB password, reconcile intentionally, or reset DB only when data loss is acceptable. |
 | Push fails to target project | Project missing or credentials lack push rights | Push logs contain denied/not found | Create project and grant robot/user push rights. |
 | Trivy stale or useless | Offline DB not maintained | Scanner findings absent/stale | Keep Trivy disabled until offline DB lifecycle exists. |
 
@@ -150,23 +889,81 @@ flowchart TB
 
 ---
 
-## Appendices
+## Documentation and Diagram Governance
 
-### Appendix A - Primary Operator Commands
+The authoritative diagram sources live under `diagrams/mermaid-source/*.mmd`. The Markdown blocks in this document are synchronized from those source files, and the export links point to the rendered SVG/PNG assets under `diagrams/svg/` and `diagrams/png/`.
+
+GitHub Actions are not required. Diagram maintenance is local-first:
 
 ```bash
+./diagrams/apply-diagram-updates.sh . --install-deps --install-browser-deps
+./diagrams/apply-diagram-updates.sh .
+```
+
+The sync script is intentionally strict. If this document is missing an indexed diagram, if an export line is duplicated, or if a Mermaid block is not immediately followed by the matching export line, the sync fails instead of silently writing bad documentation. This is deliberate. Diagram drift is a documentation supply-chain problem.
+
+Keep these files in the same commit when diagrams change:
+
+- `docs/System-Design-Document.md`
+- `diagrams/mermaid-source/*.mmd`
+- `diagrams/svg/*.svg`
+- `diagrams/png/*.png`
+- `diagrams/DIAGRAM-INDEX.md`
+- `diagrams/DIAGRAM-INDEX.json`
+- `diagrams/DIAGRAM-SYNC-REPORT.md`
+
+---
+
+## Appendices
+
+### Appendix A - Default Deployment Settings
+
+| Setting | Default Intent |
+| --- | --- |
+| `HARBOR_HOSTNAME` | External registry FQDN, default `kubeharbor.dev.kube`. |
+| `HARBOR_VERSION` | Harbor offline installer version, default `v2.15.1`. |
+| `HARBOR_CONFIG_VERSION` | Harbor config schema version, default `2.15.1`. |
+| `HARBOR_DATA_VOLUME` | Harbor data path, default `/data`. |
+| `DOCKER_DATA_ROOT` | Docker runtime storage path, default `/data/docker`. |
+| `CONTAINERD_ROOT` | containerd root path, default `/data/containerd`. |
+| `IMAGE_TRANSFER_ROOT` | Image transfer utility root, default `/data/kubeharbor-image-transfer`. |
+| `INSTALL_DOCKER` | Whether to install Docker from local `.deb` files. |
+| `LOAD_EXTRA_IMAGES` | Whether to load saved image archives before Harbor install. |
+| `USE_DHI_HARBOR_PORTAL` | Whether to replace only the Harbor portal service image with the DHI image. |
+| `INSTALL_TRIVY` | Whether to enable Trivy during Harbor prepare. Keep false unless offline DB lifecycle exists. |
+
+### Appendix B - Primary Operator Commands
+
+```bash
+# Build the air-gap artifact package on an Internet-connected Ubuntu staging host.
 sudo ./tools/download-airgap-artifacts-on-internet-host.sh
+
+# Install on the air-gapped kubeharbor VM.
 sudo ./install.sh
+
+# Check service lifecycle.
 sudo systemctl status harbor
 sudo systemctl restart harbor
-cd /opt/harbor && sudo docker compose ps
+
+# Inspect Harbor Compose state.
+cd /opt/harbor
+sudo docker compose ps
+sudo docker compose logs --tail=300
+
+# Validate API health.
 curl -k https://kubeharbor.dev.kube/api/v2.0/ping
+
+# Install Docker client CA trust.
 sudo ./scripts/08-install-client-docker-ca.sh kubeharbor.dev.kube /path/to/ca.crt
+
+# Pull large image list into /data-backed Docker cache.
 sudo ./tools/pull-images-to-data-cache.sh
+
+# Push cached images into Harbor.
 sudo ./tools/push-data-cache-to-harbor.sh --target kubeharbor.dev.kube/library
 ```
 
-### Appendix B - Design Decision Log
+### Appendix C - Design Decision Log
 
 | Decision | Rationale | Tradeoff |
 | --- | --- | --- |
@@ -177,8 +974,9 @@ sudo ./tools/push-data-cache-to-harbor.sh --target kubeharbor.dev.kube/library
 | Keep DHI portal override optional and narrow | Limits blast radius to one Harbor service. | Full stack is not Docker Hardened Image-based. |
 | Disable Trivy by default | Avoids stale scanner posture without offline DB lifecycle. | Vulnerability scanning is not available until DB process exists. |
 | Generate local checksums | Detects corruption during transfer into the air gap. | Does not replace upstream signature/provenance validation. |
+| Render diagrams locally | GitHub Actions are not enabled. | Operators need local Node/Mermaid/Puppeteer dependencies. |
 
-### Appendix C - Non-Goals
+### Appendix D - Non-Goals
 
 - This design does not provide multi-node Harbor high availability.
 - This design does not define enterprise identity integration for Harbor.
@@ -186,6 +984,6 @@ sudo ./tools/push-data-cache-to-harbor.sh --target kubeharbor.dev.kube/library
 - This design does not make Trivy useful unless offline DB import/update is operationalized.
 - This design does not allow direct file-copy ingestion into Harbor registry storage; images must be pushed through the registry API.
 
-### Appendix D - Acceptance Criteria
+### Appendix E - Acceptance Criteria
 
 A kubeharbor deployment is ready for internal platform use when `/data` is mounted, Docker reports `DockerRootDir` under `/data`, Harbor required services are running, `/api/v2.0/ping` succeeds, authenticated API validation succeeds, Docker and RKE2/containerd trust are configured, representative image push/pull succeeds, and backup/restore ownership is documented.
