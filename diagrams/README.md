@@ -1,8 +1,17 @@
 # Diagram Rendering Workflow
 
-The kubeharbor system design document uses inline Mermaid diagrams for GitHub preview and checked-in SVG/PNG exports for direct download links.
+The kubeharbor diagram folder follows the same documentation asset pattern used by `cantrellr/k8s-mystical-mesh-documents/diagrams`:
 
-GitHub Actions are **not required**. Render the exports locally from a normal clone of this repository.
+- Mermaid source files live in `diagrams/mermaid-source/`.
+- Rendered SVG exports live in `diagrams/svg/`.
+- Rendered PNG exports live in `diagrams/png/`.
+- `DIAGRAM-INDEX.md` provides a human-readable diagram inventory.
+- `DIAGRAM-INDEX.json` provides machine-readable diagram metadata.
+- `DIAGRAM-SYNC-REPORT.md` documents the export and sync contract.
+- `apply-diagram-updates.sh` applies the complete diagram sync unit.
+- `sync-mermaid-markdown.py` keeps Markdown Mermaid blocks and index metadata aligned with the `.mmd` files.
+
+The only intentional kubeharbor difference is that SVG/PNG exports are rendered locally with Mermaid CLI because GitHub Actions are not enabled.
 
 ## Source and output paths
 
@@ -11,35 +20,35 @@ GitHub Actions are **not required**. Render the exports locally from a normal cl
 | `diagrams/mermaid-source/*.mmd` | Source-of-truth Mermaid diagrams. |
 | `diagrams/svg/*.svg` | Rendered SVG exports. |
 | `diagrams/png/*.png` | Rendered PNG exports. |
-| `docs/System-Design-Document.md` | Markdown document that links to the rendered exports. |
+| `docs/System-Design-Document.md` | Markdown document that embeds Mermaid blocks and links to rendered exports. |
 | `diagrams/DIAGRAM-INDEX.md` | Human-readable diagram index. |
 | `diagrams/DIAGRAM-INDEX.json` | Machine-readable diagram index. |
 
-## First-time setup and render
+## Recommended full sync
 
-From the repository root:
-
-```bash
-./diagrams/render-mermaid-assets.sh --repo . --install-deps --sync-index
-```
-
-That command installs Mermaid CLI into `.diagram-tools/`, renders all `.mmd` files into SVG and PNG, and refreshes the diagram index/Markdown links.
-
-## Render after Mermaid source changes
-
-```bash
-./diagrams/render-mermaid-assets.sh --repo . --sync-index
-```
-
-## Wrapper command
-
-The wrapper does the same full sync and passes additional renderer options through:
+From the repository root, run the wrapper. This mirrors the reference repo's workflow and commits the complete sync unit when changes are staged.
 
 ```bash
 ./diagrams/apply-diagram-updates.sh . --install-deps
 ```
 
-## Useful options
+Use `--install-deps` the first time on a workstation that does not already have Mermaid CLI. It installs local tooling under `.diagram-tools/`, which is intentionally ignored by Git.
+
+After dependencies are installed, use:
+
+```bash
+./diagrams/apply-diagram-updates.sh .
+```
+
+## Render only
+
+Use the lower-level renderer when you want to generate SVG/PNG files without automatically staging and committing the full sync unit.
+
+```bash
+./diagrams/render-mermaid-assets.sh --repo . --sync-index
+```
+
+## Useful render options
 
 ```bash
 # Clean previous exports first.
@@ -62,12 +71,16 @@ The renderer looks for Mermaid CLI in this order:
 
 Use `--install-deps` when Mermaid CLI is not already available.
 
-## Commit workflow
+## Operator contract
 
-After rendering, review and commit the generated artifacts:
+Keep these files in the same commit whenever diagrams change:
 
-```bash
-git status --short
-git add diagrams/mermaid-source diagrams/svg diagrams/png diagrams/DIAGRAM-INDEX.md diagrams/DIAGRAM-INDEX.json diagrams/DIAGRAM-SYNC-REPORT.md docs/System-Design-Document.md
-git commit -m "Render Mermaid diagram exports"
-```
+- `diagrams/mermaid-source/*.mmd`
+- `diagrams/svg/*.svg`
+- `diagrams/png/*.png`
+- `diagrams/DIAGRAM-INDEX.md`
+- `diagrams/DIAGRAM-INDEX.json`
+- `diagrams/DIAGRAM-SYNC-REPORT.md`
+- Any Markdown files updated by `sync-mermaid-markdown.py`, especially `docs/System-Design-Document.md`
+
+Splitting the Mermaid source, rendered exports, and Markdown links across separate commits creates diagram drift. Do not do that.
