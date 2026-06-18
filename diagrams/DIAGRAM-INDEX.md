@@ -1,10 +1,10 @@
 # Diagram Export Index
 
-The diagrams below were exported from Mermaid code blocks in the kubeharbor system design document.
+The diagrams below are exported from Mermaid code blocks in the kubeharbor system design document.
 
 | Source file | Diagram | Mermaid source | SVG | PNG | Nodes | Edges |
 | --- | ---: | --- | --- | --- | ---: | ---: |
-| `docs/System-Design-Document.md` | 1 | [`system-design-document-diagram-01.mmd`](mermaid-source/system-design-document-diagram-01.mmd) | [SVG](svg/system-design-document-diagram-01.svg) | [PNG](png/system-design-document-diagram-01.png) | 16 | 18 |
+| `docs/System-Design-Document.md` | 1 | [`system-design-document-diagram-01.mmd`](mermaid-source/system-design-document-diagram-01.mmd) | [SVG](svg/system-design-document-diagram-01.svg) | [PNG](png/system-design-document-diagram-01.png) | 18 | 21 |
 | `docs/System-Design-Document.md` | 2 | [`system-design-document-diagram-02.mmd`](mermaid-source/system-design-document-diagram-02.mmd) | [SVG](svg/system-design-document-diagram-02.svg) | [PNG](png/system-design-document-diagram-02.png) | 8 | 7 |
 | `docs/System-Design-Document.md` | 3 | [`system-design-document-diagram-03.mmd`](mermaid-source/system-design-document-diagram-03.mmd) | [SVG](svg/system-design-document-diagram-03.svg) | [PNG](png/system-design-document-diagram-03.png) | 18 | 17 |
 | `docs/System-Design-Document.md` | 4 | [`system-design-document-diagram-04.mmd`](mermaid-source/system-design-document-diagram-04.mmd) | [SVG](svg/system-design-document-diagram-04.svg) | [PNG](png/system-design-document-diagram-04.png) | 13 | 14 |
