@@ -8,7 +8,7 @@ This folder contains the operator-facing documentation for the `kubeharbor` air-
 | --- | --- |
 | [System Design Document](System-Design-Document.md) | Complete system architecture, deployment flow, storage model, security architecture, operations model, failure modes, roadmap, and Mermaid diagrams. |
 | [Operator Runbook](operator-runbook.md) | Day-0/Day-1/Day-2 operations, service management, validation, backup, reset, and break/fix procedures. |
-| [Image Transfer Workflow](image-transfer-workflow.md) | Internet-connected image pull, VM clone/move, and air-gapped push workflow. |
+| [Image Transfer Workflow](image-transfer-workflow.md) | Internet-connected image pull, VM clone/move, and air-gapped push workflow using `k8s-airgap-images`. |
 | [Air-gap SBOM Workflow](sbom-airgap.md) | SBOM/provenance generation, transfer artifacts, Syft options, and air-gapped validation. |
 | [Hardening Checklist](hardening-checklist.md) | Security and operational hardening checklist for the VM, Docker, Harbor, backups, SBOMs, and documentation assets. |
 | [Documentation Maintenance](documentation-maintenance.md) | Documentation ownership model, diagram sync process, local render workflow, and drift-prevention rules. |
@@ -52,7 +52,7 @@ For a new operator, read these in order:
 1. [System Design Document](System-Design-Document.md) to understand the architecture and design constraints.
 2. [Operator Runbook](operator-runbook.md) before touching an installed VM.
 3. [Air-gap SBOM Workflow](sbom-airgap.md) before building or transferring an air-gap package.
-4. [Image Transfer Workflow](image-transfer-workflow.md) before pulling or pushing large platform image sets.
+4. [Image Transfer Workflow](image-transfer-workflow.md) before staging `k8s-airgap-images` or pulling/pushing large platform image sets.
 5. [Hardening Checklist](hardening-checklist.md) before promoting the registry for production-like use.
 6. [Documentation Maintenance](documentation-maintenance.md) before editing diagrams or architecture docs.
 
@@ -68,6 +68,13 @@ sudo INSTALL_SYFT_FOR_SBOM=true REQUIRE_SYFT_FOR_SBOM=true \
 
 # Install on the air-gapped kubeharbor VM.
 sudo ./install.sh
+
+# Stage the k8s-airgap-images repo for large image pull/push workflows.
+sudo ./tools/install-k8s-airgap-images.sh /path/to/k8s-airgap-images --replace
+
+# Pull and push image lists using the staged k8s-airgap-images utility.
+sudo ./tools/pull-images-to-data-cache.sh
+sudo ./tools/push-data-cache-to-harbor.sh --target kubeharbor.dev.kube/library
 
 # Verify Harbor state.
 sudo systemctl status harbor
