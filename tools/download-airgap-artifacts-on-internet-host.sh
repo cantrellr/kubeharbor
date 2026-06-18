@@ -208,12 +208,18 @@ tar -C "$parent" \
   --exclude="${name}/certs/*.key" \
   --exclude="${name}/.docker" \
   -czf "$package_path" "$name"
-sha256sum "$package_path" > "$checksum_path"
+(
+  cd "${OUTPUT_DIR}"
+  sha256sum "$(basename "$package_path")" > "$(basename "$checksum_path")"
+)
 
 if [[ -d "${BUNDLE_DIR}/sbom" ]] && compgen -G "${BUNDLE_DIR}/sbom/*" > /dev/null; then
   log "Creating external SBOM archive: ${sbom_archive_path}"
   tar -C "${BUNDLE_DIR}" -czf "$sbom_archive_path" sbom
-  sha256sum "$sbom_archive_path" > "$sbom_archive_checksum_path"
+  (
+    cd "${OUTPUT_DIR}"
+    sha256sum "$(basename "$sbom_archive_path")" > "$(basename "$sbom_archive_checksum_path")"
+  )
 fi
 
 cat <<DONE
