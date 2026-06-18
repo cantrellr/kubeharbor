@@ -1,11 +1,11 @@
 flowchart TB
     subgraph cluster_1_InternetVM["Internet-Connected kubeharbor VM"]
         InstallBundle["Install kubeharbor Bundle"]
-        ImageZip["image-airgap-bundle-updated.zip"]
-        ExtractUtility["tools/install-image-airgap-bundle.sh"]
+        K8sRepo["k8s-airgap-images Repo<br/>image lists + pull/push utility"]
+        StageUtility["tools/install-k8s-airgap-images.sh"]
         PullUtility["tools/pull-images-to-data-cache.sh"]
         LocalCache["Local Docker Cache<br/>/data/docker"]
-        PullLogs["Pull Logs<br/>/data/kubeharbor-image-transfer/logs"]
+        PullLogs["Pull Logs<br/>/data/k8s-airgap-images/logs"]
     end
 
     subgraph cluster_2_CloneMove["Clone / Re-IP / Move"]
@@ -20,9 +20,9 @@ flowchart TB
         PullTest["Representative docker pull Test"]
     end
 
-    InstallBundle --> ImageZip
-    ImageZip --> ExtractUtility
-    ExtractUtility --> PullUtility
+    InstallBundle --> K8sRepo
+    K8sRepo --> StageUtility
+    StageUtility --> PullUtility
     PullUtility --> LocalCache
     PullUtility --> PullLogs
     LocalCache --> VMClone
