@@ -3,7 +3,8 @@ set -euo pipefail
 
 # Run this on an Internet-connected Ubuntu 24.04 x86_64 staging machine.
 # It downloads Docker Engine offline packages, Harbor's offline installer,
-# pulls/saves the requested DHI image, and emits a single tarball to move into the air gap.
+# pulls/saves the requested DHI image, generates SBOM/provenance metadata,
+# and emits a single tarball to move into the air gap.
 
 BUNDLE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HARBOR_VERSION="${HARBOR_VERSION:-v2.15.1}"
@@ -12,6 +13,9 @@ DHI_IMAGE="${DHI_IMAGE:-cantrellcloud/dhi-harbor-portal:2.15.1-debian}"
 DOWNLOAD_HARBOR="${DOWNLOAD_HARBOR:-true}"
 DOWNLOAD_DOCKER_DEBS="${DOWNLOAD_DOCKER_DEBS:-true}"
 DOWNLOAD_DHI_IMAGE="${DOWNLOAD_DHI_IMAGE:-true}"
+GENERATE_SBOM="${GENERATE_SBOM:-true}"
+INSTALL_SYFT_FOR_SBOM="${INSTALL_SYFT_FOR_SBOM:-false}"
+REQUIRE_SYFT_FOR_SBOM="${REQUIRE_SYFT_FOR_SBOM:-false}"
 OUTPUT_DIR="${OUTPUT_DIR:-${BUNDLE_DIR}/output}"
 PACKAGE_BASENAME="${PACKAGE_BASENAME:-kubeharbor-airgap-${HARBOR_VERSION}-$(date +%Y%m%d-%H%M%S)}"
 
@@ -25,7 +29,7 @@ warn() { echo "WARN: $*" >&2; }
 err() { echo "ERROR: $*" >&2; exit 1; }
 need_cmd() { command -v "$1" >/dev/null 2>&1 || err "missing command: $1"; }
 
-mkdir -p "${BUNDLE_DIR}/packages/docker-debs" "${BUNDLE_DIR}/installers" "${BUNDLE_DIR}/images" "${OUTPUT_DIR}"
+mkdir -p "${BUNDLE_DIR}/packages/docker-debs" "${BUNDLE_DIR}/installers" "${BUNDLE_DIR}/images" "${BUNDLE_DIR}/sbom" "${OUTPUT_DIR}"
 
 . /etc/os-release
 if [[ "${ID}" != "ubuntu" ]]; then
@@ -166,11 +170,34 @@ DHI image: ${DHI_IMAGE}
 Docker packages: packages/docker-debs/
 Harbor offline installer: installers/
 Extra image archives: images/
+SBOM and provenance metadata: sbom/
 ARTIFACTS
+
+if [[ "${GENERATE_SBOM}" == "true" ]]; then
+  log "Generating air-gap payload SBOM and provenance metadata"
+  sbom_args=(
+    --repo "${BUNDLE_DIR}"
+    --output-dir "${BUNDLE_DIR}/sbom"
+    --package-name "${PACKAGE_BASENAME}"
+    --harbor-version "${HARBOR_VERSION}"
+    --dhi-image "${DHI_IMAGE}"
+  )
+  if [[ "${INSTALL_SYFT_FOR_SBOM}" == "true" ]]; then
+    sbom_args+=(--install-syft)
+  fi
+  if [[ "${REQUIRE_SYFT_FOR_SBOM}" == "true" ]]; then
+    sbom_args+=(--require-syft)
+  fi
+  "${BUNDLE_DIR}/tools/generate-airgap-sbom.sh" "${sbom_args[@]}"
+else
+  warn "GENERATE_SBOM=false. The moveable air-gap tarball will not contain SBOM/provenance metadata."
+fi
 
 # Do not package output/ recursively. Do not include local shell history, Docker credentials, or private keys.
 package_path="${OUTPUT_DIR}/${PACKAGE_BASENAME}.tgz"
 checksum_path="${package_path}.sha256"
+sbom_archive_path="${OUTPUT_DIR}/${PACKAGE_BASENAME}-sbom.tgz"
+sbom_archive_checksum_path="${sbom_archive_path}.sha256"
 
 log "Creating moveable air-gap tarball: ${package_path}"
 parent="$(dirname "${BUNDLE_DIR}")"
@@ -183,13 +210,23 @@ tar -C "$parent" \
   -czf "$package_path" "$name"
 sha256sum "$package_path" > "$checksum_path"
 
+if [[ -d "${BUNDLE_DIR}/sbom" ]] && compgen -G "${BUNDLE_DIR}/sbom/*" > /dev/null; then
+  log "Creating external SBOM archive: ${sbom_archive_path}"
+  tar -C "${BUNDLE_DIR}" -czf "$sbom_archive_path" sbom
+  sha256sum "$sbom_archive_path" > "$sbom_archive_checksum_path"
+fi
+
 cat <<DONE
 
 SUCCESS: air-gap bundle package created.
-Package:  ${package_path}
-SHA256:   ${checksum_path}
+Package:       ${package_path}
+SHA256:        ${checksum_path}
+SBOM archive:  ${sbom_archive_path}
+SBOM SHA256:   ${sbom_archive_checksum_path}
 
-Move both files to the air-gapped VM. On kubeharbor:
+Move the package, package checksum, SBOM archive, and SBOM checksum to the air-gapped VM.
+On kubeharbor:
+  sha256sum -c $(basename "$checksum_path")
   tar -xzf $(basename "$package_path")
   cd ${name}
   cp /path/to/kubeharbor.dev.kube.crt certs/
