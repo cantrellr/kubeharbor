@@ -1,6 +1,19 @@
 # kubeHarbor Docker -- Air-Gap Deployment Bundle
 
-This bundle deploys Harbor on a single Ubuntu 24.04 LTS VM named `kubeharbor` using Docker Engine and the Docker Compose plugin.
+This bundle deploys Harbor on a single Ubuntu 24.04 LTS VM named `kubeharbor` using Docker Engine and the Docker Compose plugin. It is designed for disconnected Kubernetes platform environments that need an internal image registry for RKE2, Rancher, Argo CD, Istio, monitoring, and related platform bundles.
+
+This is viable for a small/internal air-gapped registry. It is **not** a high-availability design. Treat Harbor as a platform dependency: if it is down, Kubernetes lifecycle work gets painful quickly.
+
+## Documentation map
+
+| Document | Purpose |
+| --- | --- |
+| [docs/System-Design-Document.md](docs/System-Design-Document.md) | System architecture, deployment model, runtime model, storage, security, operations, failure modes, and Mermaid diagrams. |
+| [docs/operator-runbook.md](docs/operator-runbook.md) | Start/stop/status, reconfiguration, reset, validation, backup, and break/fix procedures. |
+| [docs/image-transfer-workflow.md](docs/image-transfer-workflow.md) | Internet-connected pull, VM clone/move, and air-gapped push workflow. |
+| [docs/hardening-checklist.md](docs/hardening-checklist.md) | VM, network, Docker, Harbor, backup, and recovery hardening checklist. |
+| [docs/documentation-maintenance.md](docs/documentation-maintenance.md) | How to maintain docs, diagrams, rendered SVG/PNG assets, and index metadata. |
+| [diagrams/README.md](diagrams/README.md) | Local Mermaid rendering workflow. Use this when updating diagrams. |
 
 ## Target VM
 
@@ -17,8 +30,6 @@ This bundle deploys Harbor on a single Ubuntu 24.04 LTS VM named `kubeharbor` us
 | Harbor | v2.15.1 offline installer |
 | DHI portal image | `cantrellcloud/dhi-harbor-portal:2.15.1-debian` |
 
-This is viable for a small/internal air-gapped registry. It is not a high-availability design. Treat Harbor as a platform dependency: if it is down, Kubernetes lifecycle work gets painful quickly.
-
 ## Recommended DHI image tag
 
 Use the runtime Docker Hardened Image tag that matches the Harbor version deployed by the offline installer:
@@ -27,7 +38,7 @@ Use the runtime Docker Hardened Image tag that matches the Harbor version deploy
 cantrellcloud/dhi-harbor-portal:2.15.1-debian
 ```
 
-Do not use the `-dev` variant as the default steady-state portal image. The `-dev` tag is intended for build/troubleshooting workflows and usually carries a larger runtime footprint. Use it only when you are intentionally debugging or validating the hardened image behavior.
+Do not use the `-dev` variant as the default steady-state portal image. The `-dev` tag is intended for build/troubleshooting workflows and usually carries a larger runtime footprint. Use it only when you are intentionally debugging or validating hardened image behavior.
 
 ## Storage defaults
 
@@ -69,7 +80,7 @@ The script:
 1. Adds the official Docker apt repo on the staging host.
 2. Downloads Docker Engine, CLI, containerd, Buildx, Compose plugin, and dependency `.deb` files into `packages/docker-debs/`.
 3. Downloads the Harbor offline installer into `installers/`.
-4. Prompts for Docker username and password/access token.
+4. Prompts for Docker username and password/access token when required.
 5. Runs `docker pull cantrellcloud/dhi-harbor-portal:2.15.1-debian` by default.
 6. Saves that image into `images/*.tar`.
 7. Generates SHA256 files.
@@ -105,7 +116,7 @@ Edit deployment settings:
 vi config/harbor.env
 ```
 
-For the 500 GB data disk, set one of these paths:
+For the 500 GB data disk, set one of these paths.
 
 ### Existing `/data` mount
 
@@ -132,13 +143,11 @@ Then deploy:
 sudo ./install.sh
 ```
 
-Harbor startup now defaults to serial orchestration to avoid logger startup races:
+Harbor startup defaults to serial orchestration to avoid logger startup races:
 
 1. Start `harbor-log` first.
 2. Wait for `127.0.0.1:1514` listener readiness.
 3. Start remaining Harbor services.
-
-This replaces the previous parallel-first startup with retry/fallback behavior.
 
 ## DHI portal behavior
 
@@ -181,7 +190,7 @@ After the VM is cloned and moved/re-IP'd into the air-gapped environment, push t
 sudo ./tools/push-data-cache-to-harbor.sh --target kubeharbor.dev.kube/library
 ```
 
-The default push mode is `strip-registry`, so upstream references are mapped under the Harbor `library` project without the source registry hostname. Full details are in `docs/image-transfer-workflow.md`.
+The default push mode is `strip-registry`, so upstream references are mapped under the Harbor `library` project without the source registry hostname. Full details are in [docs/image-transfer-workflow.md](docs/image-transfer-workflow.md).
 
 ## Docker client trust
 
@@ -193,6 +202,24 @@ sudo docker login kubeharbor.dev.kube
 ```
 
 For RKE2/containerd nodes, configure trust in the RKE2/containerd registry configuration instead of Docker's `/etc/docker/certs.d` path.
+
+## Diagram and documentation maintenance
+
+GitHub Actions are not required for this repo. Diagrams are rendered locally with Mermaid CLI.
+
+First-time workstation setup and sync:
+
+```bash
+./diagrams/apply-diagram-updates.sh . --install-deps --install-browser-deps
+```
+
+Normal re-sync after editing diagram source or the system design document:
+
+```bash
+./diagrams/apply-diagram-updates.sh .
+```
+
+Do not run the diagram renderer with `sudo`. It should run as your normal user. The browser dependency installer uses `sudo` internally only for `apt-get`.
 
 ## Service startup behavior
 
