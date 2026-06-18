@@ -7,9 +7,9 @@ flowchart TB
 
     subgraph cluster_2_DataDisk["500 GB Data Disk mounted at /data"]
         DataVolume["/data<br/>Harbor data_volume"]
-        DockerRoot["/data/docker<br/>DockerRootDir"]
-        ContainerdRoot["/data/containerd<br/>containerd root"]
-        TransferRoot["/data/kubeharbor-image-transfer<br/>image-airgap utility"]
+        DockerData["/data/docker<br/>DockerRootDir"]
+        ContainerdData["/data/containerd<br/>containerd data"]
+        TransferRepo["/data/k8s-airgap-images<br/>image lists + utility"]
     end
 
     subgraph cluster_3_Workloads["Storage Consumers"]
@@ -19,17 +19,17 @@ flowchart TB
     end
 
     RootFS --> OptHarbor
-    EtcConfig --> DockerRoot
-    EtcConfig --> ContainerdRoot
+    EtcConfig --> DockerData
+    EtcConfig --> ContainerdData
     OptHarbor --> HarborServices
     HarborServices --> DataVolume
-    DockerPulls --> DockerRoot
-    DockerPulls --> ContainerdRoot
-    ImagePromotion --> TransferRoot
-    ImagePromotion --> DockerRoot
+    DockerPulls --> DockerData
+    DockerPulls --> ContainerdData
+    ImagePromotion --> TransferRepo
+    ImagePromotion --> DockerData
     ImagePromotion --> DataVolume
 
     style DataVolume fill:#e3f2fd
-    style DockerRoot fill:#e8f5e9
-    style ContainerdRoot fill:#e8f5e9
+    style DockerData fill:#e8f5e9
+    style ContainerdData fill:#e8f5e9
     style RootFS fill:#ffebee
