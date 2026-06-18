@@ -9,7 +9,8 @@ This folder contains the operator-facing documentation for the `kubeharbor` air-
 | [System Design Document](System-Design-Document.md) | Complete system architecture, deployment flow, storage model, security architecture, operations model, failure modes, roadmap, and Mermaid diagrams. |
 | [Operator Runbook](operator-runbook.md) | Day-0/Day-1/Day-2 operations, service management, validation, backup, reset, and break/fix procedures. |
 | [Image Transfer Workflow](image-transfer-workflow.md) | Internet-connected image pull, VM clone/move, and air-gapped push workflow. |
-| [Hardening Checklist](hardening-checklist.md) | Security and operational hardening checklist for the VM, Docker, Harbor, and backups. |
+| [Air-gap SBOM Workflow](sbom-airgap.md) | SBOM/provenance generation, transfer artifacts, Syft options, and air-gapped validation. |
+| [Hardening Checklist](hardening-checklist.md) | Security and operational hardening checklist for the VM, Docker, Harbor, backups, SBOMs, and documentation assets. |
 | [Documentation Maintenance](documentation-maintenance.md) | Documentation ownership model, diagram sync process, local render workflow, and drift-prevention rules. |
 | [Diagram Workflow](../diagrams/README.md) | Local Mermaid rendering workflow for `.mmd`, SVG, PNG, and index synchronization. |
 
@@ -50,9 +51,10 @@ For a new operator, read these in order:
 
 1. [System Design Document](System-Design-Document.md) to understand the architecture and design constraints.
 2. [Operator Runbook](operator-runbook.md) before touching an installed VM.
-3. [Image Transfer Workflow](image-transfer-workflow.md) before pulling or pushing large platform image sets.
-4. [Hardening Checklist](hardening-checklist.md) before promoting the registry for production-like use.
-5. [Documentation Maintenance](documentation-maintenance.md) before editing diagrams or architecture docs.
+3. [Air-gap SBOM Workflow](sbom-airgap.md) before building or transferring an air-gap package.
+4. [Image Transfer Workflow](image-transfer-workflow.md) before pulling or pushing large platform image sets.
+5. [Hardening Checklist](hardening-checklist.md) before promoting the registry for production-like use.
+6. [Documentation Maintenance](documentation-maintenance.md) before editing diagrams or architecture docs.
 
 ## Key operator commands
 
@@ -60,13 +62,16 @@ For a new operator, read these in order:
 # Build the air-gap package on an Internet-connected Ubuntu staging host.
 sudo ./tools/download-airgap-artifacts-on-internet-host.sh
 
+# Build the package and require Syft-generated SBOMs.
+sudo INSTALL_SYFT_FOR_SBOM=true REQUIRE_SYFT_FOR_SBOM=true \
+  ./tools/download-airgap-artifacts-on-internet-host.sh
+
 # Install on the air-gapped kubeharbor VM.
 sudo ./install.sh
 
 # Verify Harbor state.
 sudo systemctl status harbor
 cd /opt/harbor && sudo docker compose ps
-curl -k https://kubeharbor.dev.kube/api/v2.0/ping
 
 # Render and synchronize documentation diagrams locally.
 ./diagrams/apply-diagram-updates.sh . --install-deps --install-browser-deps
@@ -88,3 +93,9 @@ Keep the following files together in the same commit whenever diagrams change:
 - `diagrams/DIAGRAM-SYNC-REPORT.md`
 
 Splitting those files across commits creates diagram drift. That is how documentation becomes a liability instead of an asset.
+
+## SBOM asset contract
+
+The Internet staging workflow writes generated SBOM/provenance files to `sbom/` and also emits an external SBOM archive under `output/`. Keep the package, package checksum, SBOM archive, and SBOM checksum together in the transfer record.
+
+Generated `sbom/*` outputs are ignored by Git except for `sbom/README.md`. The generator script and documentation are source-controlled; the per-package SBOM files are build artifacts.
