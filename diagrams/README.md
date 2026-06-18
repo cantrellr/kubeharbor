@@ -29,10 +29,12 @@ The only intentional kubeharbor difference is that SVG/PNG exports are rendered 
 From the repository root, run the wrapper. This mirrors the reference repo's workflow and commits the complete sync unit when changes are staged.
 
 ```bash
-./diagrams/apply-diagram-updates.sh . --install-deps
+./diagrams/apply-diagram-updates.sh . --install-deps --install-browser-deps
 ```
 
 Use `--install-deps` the first time on a workstation that does not already have Mermaid CLI. It installs local tooling under `.diagram-tools/`, which is intentionally ignored by Git.
+
+Use `--install-browser-deps` on minimal Ubuntu/WSL hosts that are missing Puppeteer/Chrome shared libraries.
 
 After dependencies are installed, use:
 
@@ -99,6 +101,31 @@ The renderer looks for Mermaid CLI in this order:
 Use `--install-deps` when Mermaid CLI is not already available.
 
 The renderer also preflights the Puppeteer Chrome binary with `ldd` when a browser binary exists under the Puppeteer cache. If shared libraries are missing, the script fails before the render loop and tells the operator to rerun with `--install-browser-deps`.
+
+## Strict sync guardrails
+
+`sync-mermaid-markdown.py` fails fast when the Markdown and index do not agree. It does **not** silently accept a half-valid document. Current guardrails require:
+
+- every indexed Markdown file must exist;
+- every indexed Mermaid source file must exist;
+- each indexed diagram must have exactly one matching `Diagram export` line;
+- each `Diagram export` line must immediately follow its Mermaid code block;
+- the system design document must have at least the expected number of Mermaid blocks and export lines.
+
+For the current system design document, the expected counts are:
+
+```text
+12 Mermaid blocks
+12 Diagram export lines
+```
+
+Quick validation:
+
+```bash
+grep -c '```mermaid' docs/System-Design-Document.md
+grep -c 'Diagram export:' docs/System-Design-Document.md
+python3 diagrams/sync-mermaid-markdown.py .
+```
 
 ## Operator contract
 
