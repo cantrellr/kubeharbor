@@ -10,13 +10,6 @@ set -euo pipefail
 #   diagrams/svg/*.svg
 #   diagrams/png/*.png
 #
-# Usage examples:
-#   ./diagrams/render-mermaid-assets.sh --repo .
-#   ./diagrams/render-mermaid-assets.sh --repo . --install-deps
-#   ./diagrams/render-mermaid-assets.sh --repo . --install-browser-deps
-#   ./diagrams/render-mermaid-assets.sh --repo . --sync-index
-#   ./diagrams/render-mermaid-assets.sh --repo . --theme default --background transparent --scale 2
-#
 # This script is intentionally local-first. It does not require GitHub Actions.
 
 usage() {
@@ -220,19 +213,24 @@ run_as_root_or_sudo() {
   fi
 }
 
-apt_pkg_exists() {
-  apt-cache show "$1" >/dev/null 2>&1
+apt_pkg_installable() {
+  local pkg="$1"
+  local candidate=""
+
+  candidate="$(apt-cache policy "${pkg}" 2>/dev/null | awk '/Candidate:/ {print $2; exit}' || true)"
+  [[ -n "${candidate}" && "${candidate}" != "(none)" ]]
 }
 
-append_existing_pkg() {
+append_installable_pkg() {
   local candidate
   for candidate in "$@"; do
-    if apt_pkg_exists "${candidate}"; then
+    if apt_pkg_installable "${candidate}"; then
       APT_PACKAGES+=("${candidate}")
       return 0
     fi
   done
-  echo "WARN: None of these apt packages were found: $*" >&2
+
+  echo "WARN: None of these apt packages have an installable candidate: $*" >&2
   return 0
 }
 
@@ -242,51 +240,63 @@ install_browser_dependencies() {
     exit 1
   fi
 
+  if ! command -v apt-cache >/dev/null 2>&1; then
+    echo "ERROR: apt-cache is required to resolve browser dependency package names." >&2
+    exit 1
+  fi
+
   echo "Installing Puppeteer/Chrome shared-library dependencies with apt-get ..."
   run_as_root_or_sudo apt-get update
 
   APT_PACKAGES=()
-  append_existing_pkg ca-certificates
-  append_existing_pkg fonts-liberation
-  append_existing_pkg libasound2 libasound2t64
-  append_existing_pkg libatk-bridge2.0-0 libatk-bridge2.0-0t64
-  append_existing_pkg libatk1.0-0 libatk1.0-0t64
-  append_existing_pkg libc6
-  append_existing_pkg libcairo2
-  append_existing_pkg libcups2 libcups2t64
-  append_existing_pkg libdbus-1-3 libdbus-1-3t64
-  append_existing_pkg libexpat1
-  append_existing_pkg libfontconfig1
-  append_existing_pkg libgbm1
-  append_existing_pkg libgcc-s1 libgcc1
-  append_existing_pkg libglib2.0-0 libglib2.0-0t64
-  append_existing_pkg libgtk-3-0 libgtk-3-0t64
-  append_existing_pkg libnspr4
-  append_existing_pkg libnss3
-  append_existing_pkg libpango-1.0-0
-  append_existing_pkg libpangocairo-1.0-0
-  append_existing_pkg libstdc++6
-  append_existing_pkg libx11-6
-  append_existing_pkg libx11-xcb1
-  append_existing_pkg libxcb1
-  append_existing_pkg libxcomposite1
-  append_existing_pkg libxcursor1
-  append_existing_pkg libxdamage1
-  append_existing_pkg libxext6
-  append_existing_pkg libxfixes3
-  append_existing_pkg libxi6
-  append_existing_pkg libxrandr2
-  append_existing_pkg libxrender1
-  append_existing_pkg libxss1
-  append_existing_pkg libxtst6
-  append_existing_pkg lsb-release
-  append_existing_pkg wget
-  append_existing_pkg xdg-utils
+  append_installable_pkg ca-certificates
+  append_installable_pkg fonts-liberation
+  append_installable_pkg libasound2t64 libasound2
+  append_installable_pkg libatk-bridge2.0-0t64 libatk-bridge2.0-0
+  append_installable_pkg libatk1.0-0t64 libatk1.0-0
+  append_installable_pkg libatspi2.0-0t64 libatspi2.0-0
+  append_installable_pkg libc6
+  append_installable_pkg libcairo2
+  append_installable_pkg libcups2t64 libcups2
+  append_installable_pkg libdbus-1-3 libdbus-1-3t64
+  append_installable_pkg libdrm2
+  append_installable_pkg libexpat1
+  append_installable_pkg libfontconfig1
+  append_installable_pkg libgbm1
+  append_installable_pkg libgcc-s1 libgcc1
+  append_installable_pkg libglib2.0-0t64 libglib2.0-0
+  append_installable_pkg libgtk-3-0t64 libgtk-3-0
+  append_installable_pkg libnspr4
+  append_installable_pkg libnss3
+  append_installable_pkg libpango-1.0-0
+  append_installable_pkg libpangocairo-1.0-0
+  append_installable_pkg libstdc++6
+  append_installable_pkg libx11-6
+  append_installable_pkg libx11-xcb1
+  append_installable_pkg libxcb1
+  append_installable_pkg libxcomposite1
+  append_installable_pkg libxcursor1
+  append_installable_pkg libxdamage1
+  append_installable_pkg libxext6
+  append_installable_pkg libxfixes3
+  append_installable_pkg libxi6
+  append_installable_pkg libxkbcommon0
+  append_installable_pkg libxrandr2
+  append_installable_pkg libxrender1
+  append_installable_pkg libxshmfence1
+  append_installable_pkg libxss1
+  append_installable_pkg libxtst6
+  append_installable_pkg lsb-release
+  append_installable_pkg wget
+  append_installable_pkg xdg-utils
 
   if [[ ${#APT_PACKAGES[@]} -eq 0 ]]; then
     echo "ERROR: No browser dependency packages resolved through apt-cache." >&2
     exit 1
   fi
+
+  printf 'Resolved browser dependency packages:\n'
+  printf '  %s\n' "${APT_PACKAGES[@]}"
 
   run_as_root_or_sudo apt-get install -y --no-install-recommends "${APT_PACKAGES[@]}"
 }
