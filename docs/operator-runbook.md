@@ -54,13 +54,33 @@ curl -k https://kubeharbor.dev.kube/api/v2.0/ping
 
 - Required settings in `config/harbor.env` are empty.
 - Password placeholders remain or admin/DB passwords are shorter than 16 chars.
+- SBOM/provenance metadata is missing or invalid when `REQUIRE_AIRGAP_SBOM=true`.
 - Harbor installer filename does not match `HARBOR_VERSION`.
 - `HARBOR_CONFIG_VERSION` does not match `HARBOR_VERSION` without `v` prefix.
-- SHA256 checksum mismatch in `installers/`, `images/`, or `packages/docker-debs/`.
+- SHA256 checksum mismatch in `sbom/`, `installers/`, `images/`, or `packages/docker-debs/`.
 - TLS leaf cert/key mismatch, CA chain verification failure, or cert hostname mismatch in cert SAN/CN.
 - `USE_DHI_HARBOR_PORTAL=true` with incompatible image-loading settings.
 
 If preflight fails, fix the reported item and rerun `sudo ./install.sh`.
+
+## SBOM validation before install
+
+The Internet-side staging script generates SBOM and provenance files under `sbom/`. Validate those files before install when reviewing a transferred package:
+
+```bash
+( cd sbom && sha256sum -c SHA256SUMS )
+python3 -m json.tool sbom/airgap-bundle-manifest.json >/dev/null
+python3 -m json.tool sbom/airgap-bundle.spdx.json >/dev/null
+python3 -m json.tool sbom/airgap-bundle.cyclonedx.json >/dev/null
+```
+
+The installer performs the same control gate by default:
+
+```bash
+REQUIRE_AIRGAP_SBOM="true"
+```
+
+Set it to `false` only when intentionally installing from a legacy package that predates SBOM support. That should be a documented exception, not the new normal.
 
 ## Disk formatting safety
 
@@ -118,127 +138,3 @@ docker pull kubeharbor.dev.kube/library/<local-image>:<tag>
 In a fully air-gapped environment, use an image already present on the staging client instead of pulling from the Internet.
 
 ## Verification behavior after install
-
-`scripts/10-verify.sh` checks:
-
-- Required Harbor services are running.
-- HTTPS API ping with retries.
-- Optional authenticated API check using `admin` credentials.
-
-If verification reports warnings, inspect logs before promoting the host for production use:
-
-```bash
-cd /opt/harbor
-sudo docker compose ps
-sudo docker compose logs --tail=300
-sudo ls -lah /var/log/harbor
-```
-
-## Backup
-
-```bash
-sudo ./scripts/09-backup-harbor.sh /backup
-```
-
-## Documentation and diagram validation
-
-Run this after changing architecture documentation or Mermaid diagrams:
-
-```bash
-grep -c '```mermaid' docs/System-Design-Document.md
-grep -c 'Diagram export:' docs/System-Design-Document.md
-python3 diagrams/sync-mermaid-markdown.py .
-```
-
-Expected current counts:
-
-```text
-12 Mermaid blocks
-12 Diagram export lines
-```
-
-Full local render and sync:
-
-```bash
-./diagrams/apply-diagram-updates.sh . --install-deps --install-browser-deps
-./diagrams/apply-diagram-updates.sh .
-```
-
-Do not run the diagram wrapper with `sudo`.
-
-## Common break/fix
-
-### Docker clients fail with x509 unknown authority
-
-Install the internal CA on the client:
-
-```bash
-sudo ./scripts/08-install-client-docker-ca.sh kubeharbor.dev.kube /path/to/ca.crt
-```
-
-### Harbor containers are restarting
-
-```bash
-cd /opt/harbor
-sudo docker compose ps
-sudo docker compose logs --tail=300
-sudo ls -lah /var/log/harbor
-```
-
-### Disk full
-
-Check both Docker and Harbor data paths:
-
-```bash
-df -h
-sudo du -xh /data | sort -h | tail -30
-sudo docker system df
-```
-
-Do not blindly prune Docker on a production Harbor host. Validate what is safe first.
-
-### Diagram render fails with missing Chrome/Puppeteer libraries
-
-Install browser runtime dependencies and rerun the wrapper:
-
-```bash
-./diagrams/apply-diagram-updates.sh . --install-browser-deps
-./diagrams/apply-diagram-updates.sh .
-```
-
-### Diagram render cannot find `node`
-
-Install Node.js/npm or run as the normal user that owns the `nvm`/`asdf` environment:
-
-```bash
-sudo apt-get update
-sudo apt-get install -y nodejs npm
-./diagrams/apply-diagram-updates.sh . --install-deps
-```
-
-## Notes from first Internet-connected staging run
-
-The first staging run showed the correct end-state: Docker packages were downloaded, the Harbor offline installer was downloaded, the DHI portal image was pulled and saved, and a moveable air-gap tarball was created.
-
-Changes added in bundle v3:
-
-- Optional Harbor signature/checksum sidecar downloads are probed before fetch. If a sidecar does not exist for the release, the script now reports a controlled warning instead of printing a raw `curl: (22) 404`.
-- Docker registry login now uses an ephemeral `DOCKER_CONFIG` under `/tmp` and deletes it on exit. This prevents credentials from being persisted in `/root/.docker/config.json` when running the staging script with `sudo`.
-- The apt download scratch directory is world-writable under `/tmp` during package download to reduce `_apt` sandbox warnings. The warnings were not fatal, but they cluttered the output.
-
-## Clean slate before another Internet-connected staging run
-
-Use this before rerunning the artifact downloader when you want a known-clean package state.
-
-```bash
-sudo ./tools/clean-airgap-downloads.sh --dry-run
-sudo ./tools/clean-airgap-downloads.sh --yes
-```
-
-The default cleanup is intentionally scoped to downloaded/generated files inside the bundle and `/tmp/kubeharbor-*` staging directories. To also remove the pulled DHI image from the staging host Docker cache and remove Docker auth left from older runs:
-
-```bash
-sudo ./tools/clean-airgap-downloads.sh --yes --purge-docker-images --purge-docker-auth
-```
-
-Do not use `--purge-certs` unless you are deliberately deleting staged certificate material.
