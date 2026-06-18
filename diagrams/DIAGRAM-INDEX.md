@@ -2,6 +2,8 @@
 
 The diagrams below were exported from Mermaid code blocks in the kubeharbor system design document.
 
+This folder follows the same source/export/index pattern used by `cantrellr/k8s-mystical-mesh-documents/diagrams`, with local Mermaid CLI rendering added because GitHub Actions are not enabled for kubeharbor.
+
 | Source file | Diagram | Mermaid source | SVG | PNG | Nodes | Edges |
 | --- | ---: | --- | --- | --- | ---: | ---: |
 | `docs/System-Design-Document.md` | 1 | [`system-design-document-diagram-01.mmd`](mermaid-source/system-design-document-diagram-01.mmd) | [SVG](svg/system-design-document-diagram-01.svg) | [PNG](png/system-design-document-diagram-01.png) | 16 | 18 |
