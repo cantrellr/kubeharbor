@@ -28,6 +28,25 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${REPO_DIR}" && pwd)"
 cd "${REPO_DIR}"
 
+if [[ "${EUID}" -eq 0 && -n "${SUDO_USER:-}" && "${ALLOW_ROOT_DIAGRAM_RENDER:-0}" != "1" ]]; then
+  cat >&2 <<EOF
+ERROR: Do not run the diagram sync wrapper with sudo.
+
+The diagram renderer does not need elevated privileges. Running it with sudo can
+hide user-scoped Node.js installs from nvm/asdf and can leave generated files
+owned by root.
+
+Run this instead from the repo root:
+  ./diagrams/apply-diagram-updates.sh . --install-deps
+
+If a previous sudo run left files owned by root, fix ownership first:
+  sudo chown -R ${SUDO_USER}:${SUDO_USER} "${REPO_DIR}/.diagram-tools" "${REPO_DIR}/diagrams" "${REPO_DIR}/docs"
+
+To intentionally run as root anyway, set ALLOW_ROOT_DIAGRAM_RENDER=1.
+EOF
+  exit 1
+fi
+
 mkdir -p diagrams/mermaid-source diagrams/svg diagrams/png docs
 
 # Keep source-of-truth Mermaid files, rendered assets, Markdown, and indexes aligned.
