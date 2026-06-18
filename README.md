@@ -11,6 +11,7 @@ This is viable for a small/internal air-gapped registry. It is **not** a high-av
 | [docs/System-Design-Document.md](docs/System-Design-Document.md) | System architecture, deployment model, runtime model, storage, security, operations, failure modes, and Mermaid diagrams. |
 | [docs/operator-runbook.md](docs/operator-runbook.md) | Start/stop/status, reconfiguration, reset, validation, backup, and break/fix procedures. |
 | [docs/image-transfer-workflow.md](docs/image-transfer-workflow.md) | Internet-connected pull, VM clone/move, and air-gapped push workflow using `k8s-airgap-images`. |
+| [docs/k8s-airgap-images-integration.md](docs/k8s-airgap-images-integration.md) | What `k8s-airgap-images` is, what it is used for, how it works, and where ownership boundaries sit between kubeharbor and the image catalog. |
 | [docs/sbom-airgap.md](docs/sbom-airgap.md) | SBOM and provenance generation for the moveable air-gap package. |
 | [docs/hardening-checklist.md](docs/hardening-checklist.md) | VM, network, Docker, Harbor, backup, and recovery hardening checklist. |
 | [docs/documentation-maintenance.md](docs/documentation-maintenance.md) | How to maintain docs, diagrams, rendered SVG/PNG assets, and index metadata. |
@@ -67,6 +68,25 @@ Expected:
 ```text
 /data/docker
 ```
+
+## kubeharbor and k8s-airgap-images
+
+kubeharbor deploys and operates Harbor. It is the registry platform bundle.
+
+`k8s-airgap-images` is the separate image catalog and transfer utility used by kubeharbor for large Kubernetes platform image sets. It owns source image lists, list normalization, registry credential prompts, upstream pulls, deterministic retagging, Harbor project preflight, and push logs.
+
+That separation matters. The Harbor platform and the image catalog change at different speeds. Keep the ownership clean:
+
+| Capability | kubeharbor | k8s-airgap-images |
+| --- | --- | --- |
+| Harbor install and runtime lifecycle | Owns | Does not own |
+| Docker/containerd storage under `/data` | Owns | Consumes |
+| TLS and client trust | Owns | Requires working trust |
+| Source image catalog | References | Owns |
+| Pull/push workflows | Wraps | Owns |
+| Harbor project preflight | Delegates | Owns via Harbor API |
+
+Read [docs/k8s-airgap-images-integration.md](docs/k8s-airgap-images-integration.md) before changing the image-transfer model.
 
 ## What the Internet staging script does
 
@@ -264,5 +284,3 @@ Normal re-sync after editing diagram source or the system design document:
 ```
 
 Do not run the diagram renderer with `sudo`. It should run as your normal user. The browser dependency installer uses `sudo` internally only for `apt-get`.
-
-## Service startup behavior
