@@ -10,7 +10,7 @@ This is viable for a small/internal air-gapped registry. It is **not** a high-av
 | --- | --- |
 | [docs/System-Design-Document.md](docs/System-Design-Document.md) | System architecture, deployment model, runtime model, storage, security, operations, failure modes, and Mermaid diagrams. |
 | [docs/operator-runbook.md](docs/operator-runbook.md) | Start/stop/status, reconfiguration, reset, validation, backup, and break/fix procedures. |
-| [docs/image-transfer-workflow.md](docs/image-transfer-workflow.md) | Internet-connected pull, VM clone/move, and air-gapped push workflow. |
+| [docs/image-transfer-workflow.md](docs/image-transfer-workflow.md) | Internet-connected pull, VM clone/move, and air-gapped push workflow using `k8s-airgap-images`. |
 | [docs/sbom-airgap.md](docs/sbom-airgap.md) | SBOM and provenance generation for the moveable air-gap package. |
 | [docs/hardening-checklist.md](docs/hardening-checklist.md) | VM, network, Docker, Harbor, backup, and recovery hardening checklist. |
 | [docs/documentation-maintenance.md](docs/documentation-maintenance.md) | How to maintain docs, diagrams, rendered SVG/PNG assets, and index metadata. |
@@ -51,7 +51,7 @@ Current defaults in `config/harbor.env`:
 HARBOR_DATA_VOLUME="/data"
 DOCKER_DATA_ROOT="/data/docker"
 CONTAINERD_ROOT="/data/containerd"
-IMAGE_TRANSFER_ROOT="/data/kubeharbor-image-transfer"
+IMAGE_TRANSFER_ROOT="/data/k8s-airgap-images"
 ```
 
 The Docker installer writes both Docker and containerd storage settings so the local pull cache lives on `/data` before large image acquisition starts.
@@ -195,12 +195,21 @@ That escape hatch is useful for break/fix validation. Do not treat it as the des
 
 ## Large image pull/push workflow
 
-Use this when you have an Internet-connected VM with the kubeharbor repo and the separate `image-airgap-bundle-updated.zip` image-list bundle.
+Use this when you have an Internet-connected VM with the kubeharbor repo and the separate `k8s-airgap-images` repository.
 
-Install the image list bundle onto `/data`:
+Stage `k8s-airgap-images` onto `/data`:
 
 ```bash
-sudo ./tools/install-image-airgap-bundle.sh /path/to/image-airgap-bundle-updated.zip --replace
+sudo ./tools/install-k8s-airgap-images.sh /path/to/k8s-airgap-images --replace
+```
+
+You can also stage from an archive or Git URL:
+
+```bash
+sudo ./tools/install-k8s-airgap-images.sh /transfer/k8s-airgap-images.tgz --replace
+
+sudo K8S_AIRGAP_IMAGES_SOURCE=https://github.com/<owner>/k8s-airgap-images.git \
+  ./tools/install-k8s-airgap-images.sh --replace
 ```
 
 Pull all images while the VM still has Internet access:
@@ -216,6 +225,8 @@ sudo ./tools/push-data-cache-to-harbor.sh --target kubeharbor.dev.kube/library
 ```
 
 The default push mode is `strip-registry`, so upstream references are mapped under the Harbor `library` project without the source registry hostname. Full details are in [docs/image-transfer-workflow.md](docs/image-transfer-workflow.md).
+
+The legacy `image-airgap-bundle-updated.zip` flow is deprecated. `tools/install-image-airgap-bundle.sh` remains only as a compatibility shim and redirects to `tools/install-k8s-airgap-images.sh`.
 
 ## Docker client trust
 
@@ -259,7 +270,7 @@ sudo ./tools/clean-airgap-downloads.sh --dry-run
 sudo ./tools/clean-airgap-downloads.sh --yes
 ```
 
-Default cleanup removes generated/downloaded bundle content only: Docker `.deb` files, Harbor offline installer files, saved Docker image tars, generated SBOM/provenance files, generated checksums, `ARTIFACTS.txt`, output tarballs, and known `/tmp/kubeharbor-*` scratch directories. It does not remove your cert files, installed Docker packages, deployed Harbor runtime, or local Docker image cache unless you explicitly request that.
+Default cleanup removes generated/downloaded bundle content only: Docker `.deb` files, Harbor offline installer files, saved Docker image tars, generated SBOM/provenance files, generated checksums, `ARTIFACTS.txt`, output tarballs, and known `/tmp/kubeharbor-*` scratch directories. It does not remove your cert files, installed Docker packages, deployed Harbor runtime, staged `k8s-airgap-images`, or local Docker image cache unless you explicitly request that.
 
 For a full staging-host cleanup after an older run that may have saved Docker credentials under `/root/.docker/config.json`:
 
