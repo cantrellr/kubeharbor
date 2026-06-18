@@ -42,6 +42,51 @@ verify_checksums_in_dir() {
   echo "INFO: checksum verification passed for ${rel_dir}"
 }
 
+verify_airgap_sbom() {
+  local sbom_dir="${BUNDLE_DIR}/sbom"
+
+  if [[ "${REQUIRE_AIRGAP_SBOM:-true}" != "true" ]]; then
+    warn "REQUIRE_AIRGAP_SBOM is not true; skipping SBOM/provenance enforcement."
+    return 0
+  fi
+
+  [[ -d "$sbom_dir" ]] || fail "Missing SBOM directory: ${sbom_dir}. Rebuild the Internet-side package with tools/download-airgap-artifacts-on-internet-host.sh."
+  [[ -f "${sbom_dir}/airgap-bundle-manifest.json" ]] || fail "Missing SBOM manifest: ${sbom_dir}/airgap-bundle-manifest.json"
+  [[ -f "${sbom_dir}/airgap-bundle.spdx.json" ]] || fail "Missing SPDX SBOM: ${sbom_dir}/airgap-bundle.spdx.json"
+  [[ -f "${sbom_dir}/airgap-bundle.cyclonedx.json" ]] || fail "Missing CycloneDX SBOM: ${sbom_dir}/airgap-bundle.cyclonedx.json"
+  [[ -f "${sbom_dir}/SHA256SUMS" ]] || fail "Missing SBOM checksum file: ${sbom_dir}/SHA256SUMS"
+
+  verify_checksums_in_dir "sbom"
+
+  python3 - <<'PY' "${sbom_dir}/airgap-bundle-manifest.json" "${HARBOR_VERSION}" "${DHI_HARBOR_PORTAL_IMAGE:-}"
+import json
+import sys
+
+manifest_path, expected_harbor, expected_dhi = sys.argv[1:4]
+with open(manifest_path, "r", encoding="utf-8") as fh:
+    manifest = json.load(fh)
+
+schema = manifest.get("schema")
+if schema != "kubeharbor.airgap.bundle.sbom/v1":
+    raise SystemExit(f"unexpected SBOM schema: {schema!r}")
+
+summary = manifest.get("summary", {})
+if int(summary.get("file_count", 0)) <= 0:
+    raise SystemExit("SBOM manifest has no inventoried files")
+
+target = manifest.get("target", {})
+harbor = target.get("harbor_version", "")
+if expected_harbor and harbor and harbor != expected_harbor:
+    raise SystemExit(f"SBOM Harbor version {harbor!r} does not match config HARBOR_VERSION {expected_harbor!r}")
+
+dhi = target.get("dhi_image", "")
+if expected_dhi and dhi and dhi != expected_dhi:
+    raise SystemExit(f"SBOM DHI image {dhi!r} does not match config DHI_HARBOR_PORTAL_IMAGE {expected_dhi!r}")
+PY
+
+  echo "INFO: SBOM/provenance verification passed."
+}
+
 [[ -n "${BUNDLE_DIR:-}" ]] || fail "BUNDLE_DIR is not set"
 [[ -f "${ENV_FILE:-}" ]] || fail "ENV_FILE is not set or missing"
 
@@ -75,8 +120,10 @@ fi
 
 command -v tar >/dev/null || fail "tar is required"
 command -v openssl >/dev/null || fail "openssl is required"
-command -v python3 >/dev/null || fail "python3 is required to render harbor.yml"
+command -v python3 >/dev/null || fail "python3 is required to render harbor.yml and verify SBOM metadata"
 command -v sha256sum >/dev/null || fail "sha256sum is required"
+
+verify_airgap_sbom
 
 if [[ ! -f "${BUNDLE_DIR}/${HARBOR_LEAF_CERT_SOURCE}" ]]; then
   fail "Missing Harbor TLS leaf cert: ${BUNDLE_DIR}/${HARBOR_LEAF_CERT_SOURCE}"
