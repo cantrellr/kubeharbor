@@ -42,6 +42,11 @@ harbor.yml
 prepare
 install.sh.bak
 
+# Local diagram rendering tooling
+.diagram-tools/
+diagrams/node_modules/
+diagrams/package-lock.json
+
 # Local/editor junk
 .DS_Store
 Thumbs.db
