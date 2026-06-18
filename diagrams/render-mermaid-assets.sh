@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Source of truth: render checked-in SVG and PNG exports from Mermaid .mmd files.
 REPO_DIR="${1:-$(pwd)}"
 REPO_DIR="$(cd "${REPO_DIR}" && pwd)"
 SOURCE_DIR="${REPO_DIR}/diagrams/mermaid-source"
