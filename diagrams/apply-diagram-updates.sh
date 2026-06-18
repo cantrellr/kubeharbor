@@ -9,5 +9,8 @@ fi
 
 cd "${REPO_DIR}"
 mkdir -p diagrams/mermaid-source diagrams/svg diagrams/png docs
+
+./diagrams/render-mermaid-assets.sh "${REPO_DIR}"
 python3 diagrams/sync-mermaid-markdown.py "${REPO_DIR}"
+
 git status --short

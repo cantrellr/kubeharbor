@@ -8,6 +8,10 @@ Source folder: `diagrams/mermaid-source`
 
 The system design document Mermaid blocks were exported to source files and linked back from the Markdown document.
 
+## Export correction
+
+The first generated SVG and PNG files were placeholder/card-style assets and did not reflect Mermaid's rendered layout engine. That was the defect. The corrected process renders each `.mmd` source through Mermaid CLI (`mmdc`) so the checked-in SVG and PNG files match the Mermaid diagrams shown in Markdown.
+
 ## Generated assets
 
 | Diagram | Mermaid source | SVG | PNG |
@@ -27,9 +31,9 @@ The system design document Mermaid blocks were exported to source files and link
 
 ## Validation
 
-- Markdown now includes a `Diagram export` line after each Mermaid block.
+- Markdown includes a `Diagram export` line after each Mermaid block.
 - Mermaid source files exist for each diagram in `diagrams/mermaid-source`.
-- SVG and PNG assets exist for each diagram under `diagrams/svg` and `diagrams/png`.
+- SVG and PNG assets are rendered from Mermaid CLI output, not placeholder exports.
 - Diagram index metadata is maintained in Markdown and JSON form.
 
 ## Operational note
