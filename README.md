@@ -203,12 +203,20 @@ Stage `k8s-airgap-images` onto `/data`:
 sudo ./tools/install-k8s-airgap-images.sh /path/to/k8s-airgap-images --replace
 ```
 
-You can also stage from an archive or Git URL:
+You can also stage from an archive or Git URL. Prefer `--source` for Git URLs because it is explicit and does not depend on sudo environment handling:
 
 ```bash
 sudo ./tools/install-k8s-airgap-images.sh /transfer/k8s-airgap-images.tgz --replace
 
-sudo K8S_AIRGAP_IMAGES_SOURCE=https://github.com/<owner>/k8s-airgap-images.git \
+sudo ./tools/install-k8s-airgap-images.sh \
+  --source https://github.com/cantrellr/k8s-airgap-images.git \
+  --replace
+```
+
+Caller-provided environment overrides also work and take precedence over `config/harbor.env`:
+
+```bash
+sudo K8S_AIRGAP_IMAGES_SOURCE=https://github.com/cantrellr/k8s-airgap-images.git \
   ./tools/install-k8s-airgap-images.sh --replace
 ```
 
@@ -258,24 +266,3 @@ Normal re-sync after editing diagram source or the system design document:
 Do not run the diagram renderer with `sudo`. It should run as your normal user. The browser dependency installer uses `sudo` internally only for `apt-get`.
 
 ## Service startup behavior
-
-`harbor.service` uses `/usr/local/sbin/harbor-start-serial.sh`, so `systemctl start harbor` follows the same serial log-bootstrap sequence as installer startup.
-
-## Reset downloaded artifacts / clean slate
-
-Run this on the Internet-connected staging host when you want to purge previously downloaded artifacts and rebuild the air-gap tarball from scratch.
-
-```bash
-sudo ./tools/clean-airgap-downloads.sh --dry-run
-sudo ./tools/clean-airgap-downloads.sh --yes
-```
-
-Default cleanup removes generated/downloaded bundle content only: Docker `.deb` files, Harbor offline installer files, saved Docker image tars, generated SBOM/provenance files, generated checksums, `ARTIFACTS.txt`, output tarballs, and known `/tmp/kubeharbor-*` scratch directories. It does not remove your cert files, installed Docker packages, deployed Harbor runtime, staged `k8s-airgap-images`, or local Docker image cache unless you explicitly request that.
-
-For a full staging-host cleanup after an older run that may have saved Docker credentials under `/root/.docker/config.json`:
-
-```bash
-sudo ./tools/clean-airgap-downloads.sh --yes --purge-docker-images --purge-docker-auth
-```
-
-Use `--purge-certs` only when you intentionally want to delete files staged under `certs/`.
