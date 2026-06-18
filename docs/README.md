@@ -1,17 +1,23 @@
-# kubeharbor Docker air-gap deployment bundle
+# kubeharbor documentation
+
+This folder contains the operator-facing documentation for the `kubeharbor` air-gap Harbor deployment bundle.
 
 ## Documentation index
 
-- [System Design Document](System-Design-Document.md) - complete system architecture, deployment flow, storage model, security architecture, operations model, failure modes, roadmap, and Mermaid diagrams.
-- [Operator Runbook](operator-runbook.md) - start/stop/status, reconfiguration, reset, validation, backup, and break/fix procedures.
-- [Image Transfer Workflow](image-transfer-workflow.md) - Internet-connected pull, VM clone/move, and air-gapped push workflow.
-- [Hardening Checklist](hardening-checklist.md) - security and operational hardening checklist.
+| Document | Purpose |
+| --- | --- |
+| [System Design Document](System-Design-Document.md) | Complete system architecture, deployment flow, storage model, security architecture, operations model, failure modes, roadmap, and Mermaid diagrams. |
+| [Operator Runbook](operator-runbook.md) | Day-0/Day-1/Day-2 operations, service management, validation, backup, reset, and break/fix procedures. |
+| [Image Transfer Workflow](image-transfer-workflow.md) | Internet-connected image pull, VM clone/move, and air-gapped push workflow. |
+| [Hardening Checklist](hardening-checklist.md) | Security and operational hardening checklist for the VM, Docker, Harbor, and backups. |
+| [Documentation Maintenance](documentation-maintenance.md) | Documentation ownership model, diagram sync process, local render workflow, and drift-prevention rules. |
+| [Diagram Workflow](../diagrams/README.md) | Local Mermaid rendering workflow for `.mmd`, SVG, PNG, and index synchronization. |
 
 ---
 
-This bundle deploys Harbor on a single Ubuntu 24.04 LTS VM named `kubeharbor` using Docker Engine and the Docker Compose plugin.
+## Deployment summary
 
-## Target VM
+This bundle deploys Harbor on a single Ubuntu 24.04 LTS VM named `kubeharbor` using Docker Engine and the Docker Compose plugin.
 
 | Resource | Value |
 |---|---:|
@@ -24,157 +30,61 @@ This bundle deploys Harbor on a single Ubuntu 24.04 LTS VM named `kubeharbor` us
 | Data disk | 500 GB mounted at `/data` |
 | Runtime | Docker Engine + Docker Compose plugin |
 | Harbor | v2.15.1 offline installer |
-| Extra DHI image | `cantrellcloud/dhi-harbor-portal:2.15.1-debian-dev` |
+| DHI portal image | `cantrellcloud/dhi-harbor-portal:2.15.1-debian` |
 
 This is viable for a small/internal air-gapped registry. It is not a high-availability design. Treat Harbor as a platform dependency: if it is down, Kubernetes lifecycle work gets painful quickly.
 
-## What the Internet staging script does
+## Current default DHI posture
 
-Run this on an Internet-connected Ubuntu 24.04 amd64 staging host:
+Use the runtime Docker Hardened Image tag for steady-state deployment:
 
 ```bash
+cantrellcloud/dhi-harbor-portal:2.15.1-debian
+```
+
+The `-dev` tag is for build or troubleshooting workflows only. Do not use it as the default steady-state portal image unless you are intentionally debugging hardened image behavior.
+
+## First-read workflow
+
+For a new operator, read these in order:
+
+1. [System Design Document](System-Design-Document.md) to understand the architecture and design constraints.
+2. [Operator Runbook](operator-runbook.md) before touching an installed VM.
+3. [Image Transfer Workflow](image-transfer-workflow.md) before pulling or pushing large platform image sets.
+4. [Hardening Checklist](hardening-checklist.md) before promoting the registry for production-like use.
+5. [Documentation Maintenance](documentation-maintenance.md) before editing diagrams or architecture docs.
+
+## Key operator commands
+
+```bash
+# Build the air-gap package on an Internet-connected Ubuntu staging host.
 sudo ./tools/download-airgap-artifacts-on-internet-host.sh
-```
 
-The script:
-
-1. Adds the official Docker apt repo on the staging host.
-2. Downloads Docker Engine, CLI, containerd, Buildx, Compose plugin, and dependency `.deb` files into `packages/docker-debs/`.
-3. Downloads the Harbor offline installer into `installers/`.
-4. Prompts for Docker username and password/access token.
-5. Runs `docker pull cantrellcloud/dhi-harbor-portal:2.15.1-debian-dev`.
-6. Saves that image into `images/*.tar`.
-7. Generates SHA256 files.
-8. Creates one moveable tarball under `output/`.
-
-## Air-gap deployment flow
-
-On `kubeharbor`:
-
-```bash
-tar -xzf kubeharbor-airgap-v2.15.1-<timestamp>.tgz
-cd kubeharbor-docker-airgap-bundle-v2
-```
-
-Copy your certs into `certs/`:
-
-```bash
-cp /secure/path/kubeharbor.dev.kube.crt certs/
-cp /secure/path/kubeharbor.dev.kube.key certs/
-cp /secure/path/ca.crt certs/
-```
-
-Edit deployment settings:
-
-```bash
-vi config/harbor.env
-```
-
-For the 500 GB data disk, set one of these paths:
-
-### Existing `/data` mount
-
-If `/data` is already formatted and mounted, leave:
-
-```bash
-PREPARE_DATA_DISK="true"
-FORMAT_DATA_DISK="false"
-DATA_DISK_DEVICE=""
-```
-
-### Blank disk you want the installer to format
-
-Example only. Validate the device with `lsblk` first.
-
-```bash
-DATA_DISK_DEVICE="/dev/sdb"
-FORMAT_DATA_DISK="true"
-```
-
-Then deploy:
-
-```bash
+# Install on the air-gapped kubeharbor VM.
 sudo ./install.sh
+
+# Verify Harbor state.
+sudo systemctl status harbor
+cd /opt/harbor && sudo docker compose ps
+curl -k https://kubeharbor.dev.kube/api/v2.0/ping
+
+# Render and synchronize documentation diagrams locally.
+./diagrams/apply-diagram-updates.sh . --install-deps --install-browser-deps
+./diagrams/apply-diagram-updates.sh .
 ```
 
-Harbor startup now defaults to serial orchestration to avoid logger startup races:
+## Documentation asset contract
 
-1. Start `harbor-log` first.
-2. Wait for `127.0.0.1:1514` listener readiness.
-3. Start remaining Harbor services.
+The system design document embeds Mermaid diagrams and links to rendered SVG/PNG exports. The source of truth for diagrams is `diagrams/mermaid-source/*.mmd`; generated exports live in `diagrams/svg/` and `diagrams/png/`.
 
-### What `install.sh` now validates before install proceeds
+Keep the following files together in the same commit whenever diagrams change:
 
-The preflight step now fails early on common deployment blockers:
+- `docs/System-Design-Document.md`
+- `diagrams/mermaid-source/*.mmd`
+- `diagrams/svg/*.svg`
+- `diagrams/png/*.png`
+- `diagrams/DIAGRAM-INDEX.md`
+- `diagrams/DIAGRAM-INDEX.json`
+- `diagrams/DIAGRAM-SYNC-REPORT.md`
 
-- Missing/empty required settings in `config/harbor.env`.
-- Placeholder or too-short (`<16`) Harbor admin/DB passwords.
-- Harbor installer/version mismatch (`harbor-offline-installer-<version>.tgz` vs `HARBOR_VERSION`).
-- `HARBOR_CONFIG_VERSION` mismatch against `HARBOR_VERSION` (without `v`).
-- SHA256 mismatches in `installers/`, `images`, and `packages/docker-debs/`.
-- TLS cert/key mismatch, invalid CA chain, or cert hostname mismatch.
-- Invalid DHI portal toggle combinations.
-
-For lab-only validation on undersized VMs, you can set:
-
-- `ALLOW_UNDERSIZED_LAB="true"`
-
-This downgrades CPU/RAM baseline failures to warnings. Keep it `false` for production-like installs.
-
-This is intentional: fix preflight errors first, then rerun `sudo ./install.sh`.
-
-### Safer destructive disk behavior
-
-When `FORMAT_DATA_DISK="true"`, the installer now refuses to format if:
-
-- `DATA_DISK_DEVICE` is not a full disk (`TYPE=disk`).
-- The selected disk appears to be the OS/root disk.
-- Any partition on that disk is currently mounted.
-
-Continue only after validating the target device with `lsblk`.
-
-## DHI portal behavior
-
-The bundle always downloads and loads the DHI image when the staging script runs successfully.
-
-By default, Harbor uses the official image set from the Harbor offline installer. To swap only the `portal` service to the DHI image after the official installer runs, set:
-
-```bash
-USE_DHI_HARBOR_PORTAL="true"
-```
-
-That is intentionally explicit because `dhi-harbor-portal` is one Harbor component, not the entire Harbor deployment stack.
-
-## Docker client trust
-
-On every Docker client that will push/pull from Harbor:
-
-```bash
-sudo ./scripts/08-install-client-docker-ca.sh kubeharbor.dev.kube /path/to/ca.crt
-sudo docker login kubeharbor.dev.kube
-```
-
-For RKE2/containerd nodes, configure trust in the RKE2/containerd registry configuration instead of Docker's `/etc/docker/certs.d` path.
-
-## Service startup behavior
-
-`harbor.service` uses `/usr/local/sbin/harbor-start-serial.sh`, so `systemctl start harbor` follows the same serial log-bootstrap sequence as installer startup.
-
-## Reset downloaded artifacts / clean slate
-
-Run this on the Internet-connected staging host when you want to purge previously downloaded artifacts and rebuild the air-gap tarball from scratch.
-
-```bash
-sudo ./tools/clean-airgap-downloads.sh --dry-run
-sudo ./tools/clean-airgap-downloads.sh --yes
-```
-
-Default cleanup removes generated/downloaded bundle content only: Docker `.deb` files, Harbor offline installer files, saved Docker image tars, generated checksums, `ARTIFACTS.txt`, output tarballs, and known `/tmp/kubeharbor-*` scratch directories. It does not remove your cert files, installed Docker packages, deployed Harbor runtime, or local Docker image cache unless you explicitly request that.
-
-For a full staging-host cleanup after an older run that may have saved Docker credentials under `/root/.docker/config.json`:
-
-```bash
-sudo ./tools/clean-airgap-downloads.sh --yes --purge-docker-images --purge-docker-auth
-```
-
-Use `--purge-certs` only when you intentionally want to delete files staged under `certs/`.
+Splitting those files across commits creates diagram drift. That is how documentation becomes a liability instead of an asset.
