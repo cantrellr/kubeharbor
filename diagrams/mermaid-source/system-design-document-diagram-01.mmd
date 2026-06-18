@@ -4,12 +4,14 @@ flowchart TB
         DockerRepo["Docker Apt Repo<br/>Engine and Compose Packages"]
         HarborRelease["Harbor GitHub Release<br/>Offline Installer"]
         DHIRegistry["Docker Registry<br/>DHI Portal Image"]
+        K8sImagesRepo["k8s-airgap-images Repo<br/>Image Lists + Utility"]
         StageOutput["output/*.tgz<br/>Moveable Air-Gap Bundle"]
     end
 
     subgraph cluster_2_Transfer["Controlled Transfer Boundary"]
         Media["Approved Transfer Media<br/>Tarball + SHA256"]
         CertInput["Certificate Material<br/>Leaf Cert, Key, CA"]
+        K8sImagesArchive["k8s-airgap-images<br/>Repo Clone or Archive"]
     end
 
     subgraph cluster_3_AirGap["Air-Gapped VM - kubeharbor"]
@@ -18,7 +20,7 @@ flowchart TB
         DockerEngine["Docker Engine<br/>Docker Compose Plugin"]
         Harbor["Harbor v2.15.1<br/>Registry Services"]
         Systemd["harbor.service<br/>Serial Startup Wrapper"]
-        ImageTransfer["Image Transfer Cache<br/>/data/kubeharbor-image-transfer"]
+        ImageTransfer["Image Transfer Repo<br/>/data/k8s-airgap-images"]
     end
 
     subgraph cluster_4_Consumers["Registry Consumers"]
@@ -30,12 +32,15 @@ flowchart TB
     StageRepo --> DockerRepo
     StageRepo --> HarborRelease
     StageRepo --> DHIRegistry
+    StageRepo --> K8sImagesRepo
     DockerRepo --> StageOutput
     HarborRelease --> StageOutput
     DHIRegistry --> StageOutput
+    K8sImagesRepo --> K8sImagesArchive
     StageOutput --> Media
     Media --> Ubuntu
     CertInput --> Ubuntu
+    K8sImagesArchive --> ImageTransfer
     Ubuntu --> DataDisk
     Ubuntu --> DockerEngine
     DockerEngine --> Harbor
