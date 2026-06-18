@@ -9,6 +9,7 @@ This folder contains the operator-facing documentation for the `kubeharbor` air-
 | [System Design Document](System-Design-Document.md) | Complete system architecture, deployment flow, storage model, security architecture, operations model, failure modes, roadmap, and Mermaid diagrams. |
 | [Operator Runbook](operator-runbook.md) | Day-0/Day-1/Day-2 operations, service management, validation, backup, reset, and break/fix procedures. |
 | [Image Transfer Workflow](image-transfer-workflow.md) | Internet-connected image pull, VM clone/move, and air-gapped push workflow using `k8s-airgap-images`. |
+| [k8s-airgap-images Integration](k8s-airgap-images-integration.md) | What `k8s-airgap-images` is, what it is used for, how it works, and where ownership boundaries sit between the registry platform and the image catalog. |
 | [Air-gap SBOM Workflow](sbom-airgap.md) | SBOM/provenance generation, transfer artifacts, Syft options, and air-gapped validation. |
 | [Hardening Checklist](hardening-checklist.md) | Security and operational hardening checklist for the VM, Docker, Harbor, backups, SBOMs, and documentation assets. |
 | [Documentation Maintenance](documentation-maintenance.md) | Documentation ownership model, diagram sync process, local render workflow, and drift-prevention rules. |
@@ -52,9 +53,10 @@ For a new operator, read these in order:
 1. [System Design Document](System-Design-Document.md) to understand the architecture and design constraints.
 2. [Operator Runbook](operator-runbook.md) before touching an installed VM.
 3. [Air-gap SBOM Workflow](sbom-airgap.md) before building or transferring an air-gap package.
-4. [Image Transfer Workflow](image-transfer-workflow.md) before staging `k8s-airgap-images` or pulling/pushing large platform image sets.
-5. [Hardening Checklist](hardening-checklist.md) before promoting the registry for production-like use.
-6. [Documentation Maintenance](documentation-maintenance.md) before editing diagrams or architecture docs.
+4. [k8s-airgap-images Integration](k8s-airgap-images-integration.md) before staging the external image catalog and pull/push utility.
+5. [Image Transfer Workflow](image-transfer-workflow.md) before pulling, cloning, or pushing large platform image sets.
+6. [Hardening Checklist](hardening-checklist.md) before promoting the registry for production-like use.
+7. [Documentation Maintenance](documentation-maintenance.md) before editing diagrams or architecture docs.
 
 ## Key operator commands
 
@@ -70,7 +72,9 @@ sudo INSTALL_SYFT_FOR_SBOM=true REQUIRE_SYFT_FOR_SBOM=true \
 sudo ./install.sh
 
 # Stage the k8s-airgap-images repo for large image pull/push workflows.
-sudo ./tools/install-k8s-airgap-images.sh /path/to/k8s-airgap-images --replace
+sudo ./tools/install-k8s-airgap-images.sh \
+  --source https://github.com/cantrellr/k8s-airgap-images.git \
+  --replace
 
 # Pull and push image lists using the staged k8s-airgap-images utility.
 sudo ./tools/pull-images-to-data-cache.sh
