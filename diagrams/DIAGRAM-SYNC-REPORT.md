@@ -1,12 +1,26 @@
 # Mermaid Diagram Sync Report
 
-Generated: 2026-06-17
-Repository: `cantrellr/kubeharbor`
+Generated: 2026-06-17  
+Repository: `cantrellr/kubeharbor`  
+Reference pattern: `cantrellr/k8s-mystical-mesh-documents/diagrams`  
 Source folder: `diagrams/mermaid-source`
 
 ## Source change set analyzed
 
-The system design document Mermaid blocks were exported to source files and linked back from the Markdown document.
+The kubeharbor system design document Mermaid blocks were exported to source files and linked back from the Markdown document using the same folder contract as the reference documentation repository.
+
+## Folder contract
+
+| Folder or file | Purpose |
+| --- | --- |
+| `diagrams/mermaid-source/` | Source-of-truth Mermaid `.mmd` files. |
+| `diagrams/svg/` | Rendered SVG exports for Markdown download links. |
+| `diagrams/png/` | Rendered PNG exports for Markdown download links. |
+| `diagrams/DIAGRAM-INDEX.md` | Human-readable diagram inventory. |
+| `diagrams/DIAGRAM-INDEX.json` | Machine-readable diagram inventory and node/edge metadata. |
+| `diagrams/apply-diagram-updates.sh` | Full sync wrapper patterned after the reference repo. |
+| `diagrams/sync-mermaid-markdown.py` | Markdown and index synchronization utility patterned after the reference repo. |
+| `diagrams/render-mermaid-assets.sh` | kubeharbor-specific local Mermaid CLI renderer because GitHub Actions are not enabled. |
 
 ## Export correction
 
@@ -35,6 +49,7 @@ The first generated SVG and PNG files were placeholder/card-style assets and did
 - Mermaid source files exist for each diagram in `diagrams/mermaid-source`.
 - SVG and PNG assets are rendered from Mermaid CLI output, not placeholder exports.
 - Diagram index metadata is maintained in Markdown and JSON form.
+- The local sync workflow does not depend on GitHub Actions.
 
 ## Operational note
 
