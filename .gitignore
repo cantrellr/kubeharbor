@@ -14,6 +14,10 @@ installers/*
 images/*
 !images/README.md
 
+# Air-gap package SBOM/provenance outputs
+sbom/*
+!sbom/README.md
+
 # TLS/private key material
 certs/*
 !certs/README.md
