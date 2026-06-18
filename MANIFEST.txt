@@ -23,13 +23,18 @@ Included:
 - systemd/harbor.service
 - tools/download-airgap-artifacts-on-internet-host.sh
 - tools/clean-airgap-downloads.sh
-- tools/install-image-airgap-bundle.sh
+- tools/install-k8s-airgap-images.sh
+- tools/install-image-airgap-bundle.sh (deprecated compatibility shim)
 - tools/pull-images-to-data-cache.sh
 - tools/push-data-cache-to-harbor.sh
+- tools/generate-airgap-sbom.sh
 - docs/README.md
 - docs/hardening-checklist.md
 - docs/operator-runbook.md
 - docs/image-transfer-workflow.md
+- docs/sbom-airgap.md
+- docs/documentation-maintenance.md
+- docs/System-Design-Document.md
 
 Downloaded later by staging script:
 - Harbor offline installer tarball
@@ -37,7 +42,10 @@ Downloaded later by staging script:
 - DHI Harbor portal image tar archive
 
 Provided separately for large image promotion:
-- image-airgap-bundle-updated.zip with image lists and pull/push utility
+- k8s-airgap-images repository or archive with image lists and pull/push utility
+
+Deprecated:
+- image-airgap-bundle-updated.zip is no longer the preferred image-list bundle.
 
 Not included by design:
 - Production TLS certificate/private key
