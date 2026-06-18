@@ -14,7 +14,7 @@
 
 - Required inbound: TCP 443 from admins, Kubernetes nodes, image staging hosts, and CI/CD systems.
 - Optional inbound: TCP 80 only if you want redirect workflows. In a closed lab, 443-only is cleaner.
-- No outbound Internet from the VM.
+- No outbound Internet from the VM after it enters the air-gapped environment.
 - Allow only approved internal DNS/NTP/logging/backup destinations.
 
 ## Docker
@@ -24,6 +24,7 @@
 - Do not disable Docker iptables management unless you are explicitly replacing all Docker networking rules.
 - Use log rotation in `/etc/docker/daemon.json`.
 - Restrict membership in the `docker` group; Docker group is effectively root.
+- Confirm Docker root lives under `/data/docker` before large image pulls.
 
 ## Harbor
 
@@ -44,3 +45,24 @@
 - Test restore before calling it production-ready.
 - Keep the exact offline installer version used for each deployment/upgrade.
 - Keep checksums for Docker packages, Harbor installer artifacts, and saved image tarballs.
+- Document who owns certificate renewal, backup execution, backup validation, and restore authority.
+
+## Documentation and diagram asset integrity
+
+- Keep Mermaid source, rendered SVG/PNG files, Markdown links, and diagram indexes in the same commit.
+- Do not hand-edit generated SVG or PNG exports.
+- Do not commit `.diagram-tools/`, `node_modules/`, or `.diagram-sync-updated-files.txt`.
+- Run the local diagram sync wrapper after diagram changes:
+
+```bash
+./diagrams/apply-diagram-updates.sh .
+```
+
+- Validate the system design document still has the expected diagram count:
+
+```bash
+grep -c '```mermaid' docs/System-Design-Document.md
+grep -c 'Diagram export:' docs/System-Design-Document.md
+```
+
+Expected current count: `12` for both commands.
