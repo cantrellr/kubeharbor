@@ -42,8 +42,9 @@ harbor.yml
 prepare
 install.sh.bak
 
-# Local diagram rendering tooling
+# Local diagram rendering tooling and scratch files
 .diagram-tools/
+.diagram-sync-updated-files.txt
 diagrams/node_modules/
 diagrams/package-lock.json
 
