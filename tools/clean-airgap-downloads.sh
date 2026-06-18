@@ -32,6 +32,7 @@ Default cleanup:
   - installers/harbor-offline-installer-*.tgz and release sidecars
   - installers/SHA256SUMS
   - images/*.tar, *.inspect.json, DHI_IMAGE_REF.txt, SHA256SUMS
+  - sbom/generated SBOM and provenance files, preserving sbom/README.md
   - ARTIFACTS.txt
   - /tmp/kubeharbor-docker-debs and /tmp/kubeharbor-docker-config.*
 
@@ -118,6 +119,10 @@ add_glob "${BUNDLE_DIR}/images/*.inspect.json"
 add_path_if_exists "${BUNDLE_DIR}/images/DHI_IMAGE_REF.txt"
 add_path_if_exists "${BUNDLE_DIR}/images/SHA256SUMS"
 
+add_glob "${BUNDLE_DIR}/sbom/*.json"
+add_glob "${BUNDLE_DIR}/sbom/*.txt"
+add_path_if_exists "${BUNDLE_DIR}/sbom/SHA256SUMS"
+
 add_path_if_exists "${BUNDLE_DIR}/ARTIFACTS.txt"
 
 if [[ "${PURGE_CERTS}" == "true" ]]; then
@@ -199,6 +204,7 @@ mkdir -p \
   "${BUNDLE_DIR}/packages/docker-debs" \
   "${BUNDLE_DIR}/installers" \
   "${BUNDLE_DIR}/images" \
+  "${BUNDLE_DIR}/sbom" \
   "${BUNDLE_DIR}/certs"
 
 if [[ "${PURGE_DOCKER_IMAGES}" == "true" ]]; then
