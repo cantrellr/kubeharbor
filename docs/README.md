@@ -1,5 +1,14 @@
 # kubeharbor Docker air-gap deployment bundle
 
+## Documentation index
+
+- [System Design Document](System-Design-Document.md) - complete system architecture, deployment flow, storage model, security architecture, operations model, failure modes, roadmap, and Mermaid diagrams.
+- [Operator Runbook](operator-runbook.md) - start/stop/status, reconfiguration, reset, validation, backup, and break/fix procedures.
+- [Image Transfer Workflow](image-transfer-workflow.md) - Internet-connected pull, VM clone/move, and air-gapped push workflow.
+- [Hardening Checklist](hardening-checklist.md) - security and operational hardening checklist.
+
+---
+
 This bundle deploys Harbor on a single Ubuntu 24.04 LTS VM named `kubeharbor` using Docker Engine and the Docker Compose plugin.
 
 ## Target VM
@@ -102,7 +111,7 @@ The preflight step now fails early on common deployment blockers:
 - Placeholder or too-short (`<16`) Harbor admin/DB passwords.
 - Harbor installer/version mismatch (`harbor-offline-installer-<version>.tgz` vs `HARBOR_VERSION`).
 - `HARBOR_CONFIG_VERSION` mismatch against `HARBOR_VERSION` (without `v`).
-- SHA256 mismatches in `installers/`, `images/`, and `packages/docker-debs/`.
+- SHA256 mismatches in `installers/`, `images`, and `packages/docker-debs/`.
 - TLS cert/key mismatch, invalid CA chain, or cert hostname mismatch.
 - Invalid DHI portal toggle combinations.
 
@@ -169,4 +178,3 @@ sudo ./tools/clean-airgap-downloads.sh --yes --purge-docker-images --purge-docke
 ```
 
 Use `--purge-certs` only when you intentionally want to delete files staged under `certs/`.
-
