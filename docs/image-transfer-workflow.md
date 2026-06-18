@@ -51,7 +51,23 @@ The installer also accepts a `.tgz`, `.tar.gz`, `.tar`, `.zip`, or Git URL sourc
 ```bash
 sudo ./tools/install-k8s-airgap-images.sh /transfer/k8s-airgap-images.tgz --replace
 
-sudo K8S_AIRGAP_IMAGES_SOURCE=https://github.com/<owner>/k8s-airgap-images.git \
+sudo ./tools/install-k8s-airgap-images.sh \
+  --source https://github.com/cantrellr/k8s-airgap-images.git \
+  --replace
+```
+
+Source precedence is deterministic:
+
+1. Explicit positional source argument.
+2. `--source <path-or-url>`.
+3. Caller-provided `K8S_AIRGAP_IMAGES_SOURCE` environment variable.
+4. `K8S_AIRGAP_IMAGES_SOURCE` from `config/harbor.env`.
+5. Common local source paths.
+
+Caller environment overrides still work, even when `config/harbor.env` has an empty default:
+
+```bash
+sudo K8S_AIRGAP_IMAGES_SOURCE=https://github.com/cantrellr/k8s-airgap-images.git \
   ./tools/install-k8s-airgap-images.sh --replace
 ```
 
