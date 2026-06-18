@@ -11,6 +11,7 @@ This is viable for a small/internal air-gapped registry. It is **not** a high-av
 | [docs/System-Design-Document.md](docs/System-Design-Document.md) | System architecture, deployment model, runtime model, storage, security, operations, failure modes, and Mermaid diagrams. |
 | [docs/operator-runbook.md](docs/operator-runbook.md) | Start/stop/status, reconfiguration, reset, validation, backup, and break/fix procedures. |
 | [docs/image-transfer-workflow.md](docs/image-transfer-workflow.md) | Internet-connected pull, VM clone/move, and air-gapped push workflow. |
+| [docs/sbom-airgap.md](docs/sbom-airgap.md) | SBOM and provenance generation for the moveable air-gap package. |
 | [docs/hardening-checklist.md](docs/hardening-checklist.md) | VM, network, Docker, Harbor, backup, and recovery hardening checklist. |
 | [docs/documentation-maintenance.md](docs/documentation-maintenance.md) | How to maintain docs, diagrams, rendered SVG/PNG assets, and index metadata. |
 | [diagrams/README.md](diagrams/README.md) | Local Mermaid rendering workflow. Use this when updating diagrams. |
@@ -83,8 +84,17 @@ The script:
 4. Prompts for Docker username and password/access token when required.
 5. Runs `docker pull cantrellcloud/dhi-harbor-portal:2.15.1-debian` by default.
 6. Saves that image into `images/*.tar`.
-7. Generates SHA256 files.
-8. Creates one moveable tarball under `output/`.
+7. Generates SHA256 files for Docker packages, the Harbor installer, and saved image archives.
+8. Generates SBOM and provenance metadata under `sbom/`.
+9. Creates one moveable tarball under `output/`.
+10. Creates an external SBOM archive under `output/` so transfer records can carry SBOM metadata independently from the tarball.
+
+To require Syft-generated SBOMs in addition to the built-in file-level SPDX/CycloneDX output:
+
+```bash
+sudo INSTALL_SYFT_FOR_SBOM=true REQUIRE_SYFT_FOR_SBOM=true \
+  ./tools/download-airgap-artifacts-on-internet-host.sh
+```
 
 To override the DHI tag for testing:
 
@@ -93,13 +103,28 @@ sudo DHI_IMAGE="cantrellcloud/dhi-harbor-portal:2.15.1-debian-dev" \
   ./tools/download-airgap-artifacts-on-internet-host.sh
 ```
 
+## SBOM and transfer artifacts
+
+Every normal package build now produces four files to move together:
+
+```text
+output/kubeharbor-airgap-v2.15.1-<timestamp>.tgz
+output/kubeharbor-airgap-v2.15.1-<timestamp>.tgz.sha256
+output/kubeharbor-airgap-v2.15.1-<timestamp>-sbom.tgz
+output/kubeharbor-airgap-v2.15.1-<timestamp>-sbom.tgz.sha256
+```
+
+The main package includes the `sbom/` directory internally. The external SBOM archive is there for transfer approval records and offline review before extraction. Full details are in [docs/sbom-airgap.md](docs/sbom-airgap.md).
+
 ## Air-gap deployment flow
 
 On `kubeharbor`:
 
 ```bash
+sha256sum -c kubeharbor-airgap-v2.15.1-<timestamp>.tgz.sha256
 tar -xzf kubeharbor-airgap-v2.15.1-<timestamp>.tgz
 cd kubeharbor-docker-airgap-bundle-v2
+( cd sbom && sha256sum -c SHA256SUMS )
 ```
 
 Copy your certs into `certs/`:
@@ -234,7 +259,7 @@ sudo ./tools/clean-airgap-downloads.sh --dry-run
 sudo ./tools/clean-airgap-downloads.sh --yes
 ```
 
-Default cleanup removes generated/downloaded bundle content only: Docker `.deb` files, Harbor offline installer files, saved Docker image tars, generated checksums, `ARTIFACTS.txt`, output tarballs, and known `/tmp/kubeharbor-*` scratch directories. It does not remove your cert files, installed Docker packages, deployed Harbor runtime, or local Docker image cache unless you explicitly request that.
+Default cleanup removes generated/downloaded bundle content only: Docker `.deb` files, Harbor offline installer files, saved Docker image tars, generated SBOM/provenance files, generated checksums, `ARTIFACTS.txt`, output tarballs, and known `/tmp/kubeharbor-*` scratch directories. It does not remove your cert files, installed Docker packages, deployed Harbor runtime, or local Docker image cache unless you explicitly request that.
 
 For a full staging-host cleanup after an older run that may have saved Docker credentials under `/root/.docker/config.json`:
 
