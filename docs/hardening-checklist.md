@@ -39,12 +39,28 @@
 - Enable vulnerability scanning only after offline Trivy DB management is defined.
 - Define replication rules only after trust and namespace strategy are agreed.
 
+## SBOM and artifact provenance
+
+- Generate SBOM/provenance metadata on the Internet-connected staging host before creating the moveable tarball.
+- Keep `GENERATE_SBOM=true` for normal package builds.
+- Keep `REQUIRE_AIRGAP_SBOM=true` for air-gapped installs unless you are intentionally consuming a legacy package.
+- Move these four artifacts together: package tarball, package checksum, SBOM archive, and SBOM archive checksum.
+- Validate SBOM checksums before install:
+
+```bash
+( cd sbom && sha256sum -c SHA256SUMS )
+```
+
+- Use `INSTALL_SYFT_FOR_SBOM=true REQUIRE_SYFT_FOR_SBOM=true` when policy requires Syft-generated SPDX/CycloneDX output in addition to the built-in file-level SBOM.
+- Do not include private keys, Docker credentials, `.git`, or `output/` in SBOM scope.
+- Store SBOM archives with the transfer approval record or change ticket.
+
 ## Backups and recovery
 
 - Back up `/data` and `/opt/harbor` before upgrades.
 - Test restore before calling it production-ready.
 - Keep the exact offline installer version used for each deployment/upgrade.
-- Keep checksums for Docker packages, Harbor installer artifacts, and saved image tarballs.
+- Keep checksums for Docker packages, Harbor installer artifacts, saved image tarballs, and generated SBOM archives.
 - Document who owns certificate renewal, backup execution, backup validation, and restore authority.
 
 ## Documentation and diagram asset integrity
