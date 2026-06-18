@@ -1,13 +1,23 @@
 # Mermaid Diagram Sync Report
 
-Generated: 2026-06-17  
+Generated: 2026-06-18  
 Repository: `cantrellr/kubeharbor`  
 Reference pattern: `cantrellr/k8s-mystical-mesh-documents/diagrams`  
 Source folder: `diagrams/mermaid-source`
 
 ## Source change set analyzed
 
-The kubeharbor system design document Mermaid blocks were exported to source files and linked back from the Markdown document using the same folder contract as the reference documentation repository.
+The kubeharbor system design document Mermaid blocks are exported to source files and linked back from the Markdown document using the same folder contract as the reference documentation repository.
+
+The current design document is expected to contain:
+
+```text
+12 Mermaid blocks
+12 Diagram export lines
+12 Mermaid source files
+12 SVG exports
+12 PNG exports
+```
 
 ## Folder contract
 
@@ -25,6 +35,18 @@ The kubeharbor system design document Mermaid blocks were exported to source fil
 ## Export correction
 
 The first generated SVG and PNG files were placeholder/card-style assets and did not reflect Mermaid's rendered layout engine. That was the defect. The corrected process renders each `.mmd` source through Mermaid CLI (`mmdc`) so the checked-in SVG and PNG files match the Mermaid diagrams shown in Markdown.
+
+## Sync hardening correction
+
+The sync process is now strict about Markdown/export bindings. The script fails fast when:
+
+- an indexed Markdown file is missing;
+- an indexed Mermaid source file is missing;
+- an indexed diagram has zero or multiple matching `Diagram export` lines;
+- a Mermaid block is not immediately followed by its matching export line;
+- the Markdown file has fewer Mermaid blocks or export lines than the diagram index expects.
+
+This prevents truncated or partially rewritten documentation from being treated as valid.
 
 ## Generated assets
 
@@ -45,11 +67,16 @@ The first generated SVG and PNG files were placeholder/card-style assets and did
 
 ## Validation
 
-- Markdown includes a `Diagram export` line after each Mermaid block.
-- Mermaid source files exist for each diagram in `diagrams/mermaid-source`.
-- SVG and PNG assets are rendered from Mermaid CLI output, not placeholder exports.
-- Diagram index metadata is maintained in Markdown and JSON form.
-- The local sync workflow does not depend on GitHub Actions.
+Run this from the repo root:
+
+```bash
+grep -c '```mermaid' docs/System-Design-Document.md
+grep -c 'Diagram export:' docs/System-Design-Document.md
+python3 diagrams/sync-mermaid-markdown.py .
+./diagrams/apply-diagram-updates.sh .
+```
+
+Expected result: 12 Mermaid blocks, 12 export lines, no sync errors, and no unexpected unstaged drift after the wrapper completes.
 
 ## Operational note
 
