@@ -188,7 +188,7 @@ if [[ "${GENERATE_SBOM}" == "true" ]]; then
   if [[ "${REQUIRE_SYFT_FOR_SBOM}" == "true" ]]; then
     sbom_args+=(--require-syft)
   fi
-  "${BUNDLE_DIR}/tools/generate-airgap-sbom.sh" "${sbom_args[@]}"
+  bash "${BUNDLE_DIR}/tools/generate-airgap-sbom.sh" "${sbom_args[@]}"
 else
   warn "GENERATE_SBOM=false. The moveable air-gap tarball will not contain SBOM/provenance metadata."
 fi
