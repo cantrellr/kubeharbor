@@ -10,7 +10,8 @@ if [[ -f "${ENV_FILE}" ]]; then
   source "${ENV_FILE}"
 fi
 
-IMAGE_TRANSFER_ROOT="${IMAGE_TRANSFER_ROOT:-/data/kubeharbor-image-transfer}"
+IMAGE_TRANSFER_ROOT="${IMAGE_TRANSFER_ROOT:-/data/k8s-airgap-images}"
+K8S_AIRGAP_IMAGES_CLI="${K8S_AIRGAP_IMAGES_CLI:-}"
 IMAGE_LIST=""
 FORCE_ARGS=()
 
@@ -20,13 +21,50 @@ Usage:
   sudo ./tools/pull-images-to-data-cache.sh [--list image-lists/all-active-images.list] [--force]
 
 Purpose:
-  Pull all listed images into the local Docker cache. Docker/containerd must be configured with /data-backed storage before running this.
+  Pull all listed Kubernetes/platform images into the local Docker cache using the
+  staged k8s-airgap-images repository. Docker/containerd must be configured with
+  /data-backed storage before running this.
+
+Prerequisite:
+  sudo ./tools/install-k8s-airgap-images.sh /path/to/k8s-airgap-images --replace
 EOF_USAGE
+}
+
+find_airgap_cli() {
+  local candidates=()
+
+  if [[ -n "${K8S_AIRGAP_IMAGES_CLI}" ]]; then
+    candidates+=("${K8S_AIRGAP_IMAGES_CLI}")
+  fi
+
+  candidates+=(
+    "${IMAGE_TRANSFER_ROOT}/image-airgap.sh"
+    "${IMAGE_TRANSFER_ROOT}/k8s-airgap-images.sh"
+    "${IMAGE_TRANSFER_ROOT}/airgap-images.sh"
+    "${IMAGE_TRANSFER_ROOT}/tools/image-airgap.sh"
+    "${IMAGE_TRANSFER_ROOT}/tools/k8s-airgap-images.sh"
+    "${IMAGE_TRANSFER_ROOT}/scripts/image-airgap.sh"
+    "${IMAGE_TRANSFER_ROOT}/scripts/k8s-airgap-images.sh"
+  )
+
+  local candidate
+  for candidate in "${candidates[@]}"; do
+    if [[ -f "${candidate}" ]]; then
+      chmod +x "${candidate}" 2>/dev/null || true
+      printf '%s\n' "${candidate}"
+      return 0
+    fi
+  done
+
+  find "${IMAGE_TRANSFER_ROOT}" -maxdepth 4 -type f \
+    \( -name 'image-airgap.sh' -o -name 'k8s-airgap-images.sh' -o -name 'airgap-images.sh' \) \
+    -print 2>/dev/null | head -1
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --list)
+      [[ $# -ge 2 ]] || { echo "ERROR: --list requires a value" >&2; exit 1; }
       IMAGE_LIST="$2"; shift 2 ;;
     --force|--force-pull)
       FORCE_ARGS+=("--force"); shift ;;
@@ -36,17 +74,26 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-[[ -x "${IMAGE_TRANSFER_ROOT}/image-airgap.sh" ]] || {
-  echo "ERROR: missing image-airgap utility at ${IMAGE_TRANSFER_ROOT}." >&2
-  echo "Run: sudo ./tools/install-image-airgap-bundle.sh /path/to/image-airgap-bundle-updated.zip --replace" >&2
+[[ -d "${IMAGE_TRANSFER_ROOT}" ]] || {
+  echo "ERROR: k8s-airgap-images is not staged at ${IMAGE_TRANSFER_ROOT}." >&2
+  echo "Run: sudo ./tools/install-k8s-airgap-images.sh /path/to/k8s-airgap-images --replace" >&2
   exit 1
 }
+
+AIRGAP_CLI="$(find_airgap_cli || true)"
+[[ -n "${AIRGAP_CLI}" && -f "${AIRGAP_CLI}" ]] || {
+  echo "ERROR: no compatible k8s-airgap-images CLI found under ${IMAGE_TRANSFER_ROOT}." >&2
+  echo "Expected one of: image-airgap.sh, k8s-airgap-images.sh, airgap-images.sh." >&2
+  echo "Run: sudo ./tools/install-k8s-airgap-images.sh /path/to/k8s-airgap-images --replace" >&2
+  exit 1
+}
+
 command -v docker >/dev/null 2>&1 || { echo "ERROR: docker is required." >&2; exit 1; }
 
 root_dir="$(docker info --format '{{.DockerRootDir}}' 2>/dev/null || true)"
 if [[ "${root_dir}" != /data/* ]]; then
   echo "ERROR: DockerRootDir is '${root_dir}', not under /data." >&2
-  echo "Fix Docker data-root before pulling 1,000+ images or the OS disk will fill." >&2
+  echo "Fix Docker data-root before pulling large image sets or the OS disk will fill." >&2
   exit 1
 fi
 
@@ -57,7 +104,8 @@ args=(pull)
 if [[ -n "${IMAGE_LIST}" ]]; then args+=(--list "${IMAGE_LIST}"); fi
 args+=("${FORCE_ARGS[@]}")
 
-LOG_DIR="${IMAGE_TRANSFER_ROOT}/logs" CONTAINER_CLI=docker ./image-airgap.sh "${args[@]}"
+LOG_DIR="${IMAGE_TRANSFER_ROOT}/logs" CONTAINER_CLI=docker "${AIRGAP_CLI}" "${args[@]}"
 
 echo "INFO: Docker image cache: ${root_dir}"
+echo "INFO: Image transfer root: ${IMAGE_TRANSFER_ROOT}"
 echo "INFO: Image transfer logs: ${IMAGE_TRANSFER_ROOT}/logs"
