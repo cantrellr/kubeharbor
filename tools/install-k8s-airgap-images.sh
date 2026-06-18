@@ -5,14 +5,18 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUNDLE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 ENV_FILE="${BUNDLE_DIR}/config/harbor.env"
 
+CALLER_IMAGE_TRANSFER_ROOT="${IMAGE_TRANSFER_ROOT-}"
+CALLER_K8S_AIRGAP_IMAGES_SOURCE="${K8S_AIRGAP_IMAGES_SOURCE-}"
+CALLER_K8S_AIRGAP_IMAGES_BRANCH="${K8S_AIRGAP_IMAGES_BRANCH-}"
+
 if [[ -f "${ENV_FILE}" ]]; then
   # shellcheck disable=SC1090
   source "${ENV_FILE}"
 fi
 
-IMAGE_TRANSFER_ROOT="${IMAGE_TRANSFER_ROOT:-/data/k8s-airgap-images}"
-K8S_AIRGAP_IMAGES_SOURCE="${K8S_AIRGAP_IMAGES_SOURCE:-}"
-K8S_AIRGAP_IMAGES_BRANCH="${K8S_AIRGAP_IMAGES_BRANCH:-main}"
+IMAGE_TRANSFER_ROOT="${CALLER_IMAGE_TRANSFER_ROOT:-${IMAGE_TRANSFER_ROOT:-/data/k8s-airgap-images}}"
+K8S_AIRGAP_IMAGES_SOURCE="${CALLER_K8S_AIRGAP_IMAGES_SOURCE:-${K8S_AIRGAP_IMAGES_SOURCE:-}}"
+K8S_AIRGAP_IMAGES_BRANCH="${CALLER_K8S_AIRGAP_IMAGES_BRANCH:-${K8S_AIRGAP_IMAGES_BRANCH:-main}}"
 REPLACE="false"
 SOURCE_PATH=""
 
@@ -20,27 +24,24 @@ usage() {
   cat <<EOF_USAGE
 Usage:
   sudo ./tools/install-k8s-airgap-images.sh [source] [--dest /data/k8s-airgap-images] [--branch main] [--replace]
+  sudo ./tools/install-k8s-airgap-images.sh --source <path-or-url> [--dest /data/k8s-airgap-images] [--branch main] [--replace]
 
 Purpose:
   Stage the k8s-airgap-images repository under /data so large Kubernetes image pull/push
   workflows do not depend on the legacy image-airgap-bundle-updated.zip file.
 
-Source options:
-  - Local directory containing the k8s-airgap-images repo
-  - Local .tgz, .tar.gz, .tar, or .zip archive of the repo
-  - Git URL, for Internet-connected staging hosts only
-
-If source is omitted, the script uses K8S_AIRGAP_IMAGES_SOURCE from config/harbor.env
-or tries common local paths:
-  ../k8s-airgap-images
-  ./k8s-airgap-images
-  /data/k8s-airgap-images-source
-  /opt/k8s-airgap-images-source
+Source precedence:
+  1. Explicit positional source argument
+  2. --source <path-or-url>
+  3. Caller-provided K8S_AIRGAP_IMAGES_SOURCE environment variable
+  4. K8S_AIRGAP_IMAGES_SOURCE from config/harbor.env
+  5. Common local paths
 
 Examples:
   sudo ./tools/install-k8s-airgap-images.sh ../k8s-airgap-images --replace
   sudo ./tools/install-k8s-airgap-images.sh /transfer/k8s-airgap-images.tgz --replace
-  sudo K8S_AIRGAP_IMAGES_SOURCE=https://github.com/<owner>/k8s-airgap-images.git \
+  sudo ./tools/install-k8s-airgap-images.sh --source https://github.com/cantrellr/k8s-airgap-images.git --replace
+  sudo K8S_AIRGAP_IMAGES_SOURCE=https://github.com/cantrellr/k8s-airgap-images.git \
     ./tools/install-k8s-airgap-images.sh --replace
 EOF_USAGE
 }
@@ -50,8 +51,30 @@ warn() { echo "WARN: $*" >&2; }
 err() { echo "ERROR: $*" >&2; exit 1; }
 need_cmd() { command -v "$1" >/dev/null 2>&1 || err "missing command: $1"; }
 
+cleanup_dir() {
+  local target="$1"
+  [[ -n "${target}" && -d "${target}" ]] || return 0
+  find "${target}" -mindepth 1 -maxdepth 1 -exec rm -R -- {} + 2>/dev/null || true
+  rmdir "${target}" 2>/dev/null || true
+}
+
+replace_existing_dest() {
+  if [[ ! -e "${IMAGE_TRANSFER_ROOT}" ]]; then
+    return 0
+  fi
+  if [[ "${REPLACE}" != "true" ]]; then
+    err "destination already exists: ${IMAGE_TRANSFER_ROOT}. Use --replace to remove and recreate it."
+  fi
+  local backup="${IMAGE_TRANSFER_ROOT}.replaced.$(date +%Y%m%d%H%M%S)"
+  log "Moving existing destination to ${backup}"
+  mv "${IMAGE_TRANSFER_ROOT}" "${backup}"
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --source)
+      [[ $# -ge 2 ]] || err "--source requires a value"
+      SOURCE_PATH="$2"; shift 2 ;;
     --dest)
       [[ $# -ge 2 ]] || err "--dest requires a value"
       IMAGE_TRANSFER_ROOT="$2"; shift 2 ;;
@@ -90,7 +113,7 @@ fi
 
 [[ -n "${SOURCE_PATH}" ]] || {
   usage >&2
-  err "k8s-airgap-images source is required. Provide a source path/URL or set K8S_AIRGAP_IMAGES_SOURCE."
+  err "k8s-airgap-images source is required. Provide a source path/URL, use --source, or set K8S_AIRGAP_IMAGES_SOURCE."
 }
 
 if [[ "${IMAGE_TRANSFER_ROOT}" != /data/* ]]; then
@@ -103,7 +126,7 @@ find_compatible_root() {
   local root="$1"
   local found=""
 
-  if [[ -f "${root}/image-airgap.sh" || -f "${root}/k8s-airgap-images.sh" ]]; then
+  if [[ -f "${root}/image-airgap.sh" || -f "${root}/k8s-airgap-images.sh" || -f "${root}/airgap-images.sh" ]]; then
     printf '%s\n' "${root}"
     return 0
   fi
@@ -113,14 +136,9 @@ find_compatible_root() {
     -printf '%h\n' 2>/dev/null | head -1 || true)"
 
   if [[ -n "${found}" ]]; then
-    # Prefer the repository root when the executable lives in a tools/ or scripts/ subdirectory.
     case "$(basename "${found}")" in
-      tools|script|scripts|bin)
-        printf '%s\n' "$(dirname "${found}")"
-        ;;
-      *)
-        printf '%s\n' "${found}"
-        ;;
+      tools|script|scripts|bin) printf '%s\n' "$(dirname "${found}")" ;;
+      *) printf '%s\n' "${found}" ;;
     esac
     return 0
   fi
@@ -136,13 +154,7 @@ install_from_dir() {
   if [[ "$(readlink -f "${compatible_root}")" == "$(readlink -f "${IMAGE_TRANSFER_ROOT}" 2>/dev/null || true)" ]]; then
     log "k8s-airgap-images already staged at ${IMAGE_TRANSFER_ROOT}"
   else
-    if [[ -e "${IMAGE_TRANSFER_ROOT}" ]]; then
-      if [[ "${REPLACE}" != "true" ]]; then
-        err "destination already exists: ${IMAGE_TRANSFER_ROOT}. Use --replace to remove and recreate it."
-      fi
-      rm -rf "${IMAGE_TRANSFER_ROOT}"
-    fi
-
+    replace_existing_dest
     mkdir -p "$(dirname "${IMAGE_TRANSFER_ROOT}")"
     cp -a "${compatible_root}" "${IMAGE_TRANSFER_ROOT}"
   fi
@@ -152,7 +164,7 @@ install_from_archive() {
   local archive="$1"
   local workdir
   workdir="$(mktemp -d /tmp/kubeharbor-k8s-airgap-images.XXXXXX)"
-  cleanup_archive() { rm -rf "${workdir}"; }
+  cleanup_archive() { cleanup_dir "${workdir}"; }
   trap cleanup_archive RETURN
 
   case "${archive}" in
@@ -180,7 +192,7 @@ install_from_git() {
   need_cmd git
 
   workdir="$(mktemp -d /tmp/kubeharbor-k8s-airgap-images-git.XXXXXX)"
-  cleanup_git() { rm -rf "${workdir}"; }
+  cleanup_git() { cleanup_dir "${workdir}"; }
   trap cleanup_git RETURN
 
   log "Cloning k8s-airgap-images from ${url} ref ${K8S_AIRGAP_IMAGES_BRANCH}"
