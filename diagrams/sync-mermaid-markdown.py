@@ -2,83 +2,141 @@
 """
 Synchronize Markdown Mermaid blocks and diagram indexes with Mermaid source files.
 
-This mirrors the diagram-management pattern used by
+This follows the diagram-management pattern used by
 cantrellr/k8s-mystical-mesh-documents/diagrams while keeping kubeharbor's
 local render workflow intact.
 
 Source of truth:
   diagrams/mermaid-source/*.mmd
 
-Generated/managed metadata:
+Managed outputs:
+  Markdown files listed in diagrams/DIAGRAM-INDEX.json
   diagrams/DIAGRAM-INDEX.json
   diagrams/DIAGRAM-INDEX.md
   .diagram-sync-updated-files.txt
 
-The script updates Markdown files that contain Mermaid code blocks followed by a
-matching "Diagram export" line, then refreshes diagram index node/edge counts.
+The sync contract is intentionally strict. Each indexed diagram must have one
+and only one matching "Diagram export" line in its source Markdown file. This
+prevents the tool from silently accepting truncated documentation or mismatched
+Mermaid/export bindings.
 """
 from __future__ import annotations
 
 import json
 import re
 import sys
+from collections import defaultdict
 from pathlib import Path
 from typing import Iterable
 
-EXCLUDED_DIRS = {
-    ".git",
-    ".github",
-    ".diagram-tools",
-    "node_modules",
-    ".venv",
-    "venv",
-    "dist",
-    "build",
-}
 
-
-def iter_markdown_files(repo_dir: Path) -> Iterable[Path]:
-    for path in repo_dir.rglob("*.md"):
-        relative_parts = path.relative_to(repo_dir).parts
-        if any(part in EXCLUDED_DIRS for part in relative_parts):
-            continue
-        yield path
+EXPORT_LINE_TEMPLATE = (
+    "> Diagram export: [SVG](../diagrams/svg/{base}.svg) | "
+    "[PNG](../diagrams/png/{base}.png)"
+)
 
 
 def load_index_entries(repo_dir: Path) -> list[dict]:
     index_json = repo_dir / "diagrams" / "DIAGRAM-INDEX.json"
     if not index_json.exists():
         raise FileNotFoundError(f"Missing diagram index: {index_json}")
-    return json.loads(index_json.read_text(encoding="utf-8"))
+
+    entries = json.loads(index_json.read_text(encoding="utf-8"))
+    if not isinstance(entries, list) or not entries:
+        raise ValueError(f"Diagram index is empty or invalid: {index_json}")
+
+    required = {"source_file", "diagram_number", "base_name", "mermaid_source", "svg", "png"}
+    for idx, entry in enumerate(entries, start=1):
+        missing = sorted(required - set(entry))
+        if missing:
+            raise ValueError(f"Diagram index entry {idx} is missing required keys: {', '.join(missing)}")
+    return entries
+
+
+def group_entries_by_source(entries: Iterable[dict]) -> dict[str, list[dict]]:
+    grouped: dict[str, list[dict]] = defaultdict(list)
+    for entry in entries:
+        grouped[entry["source_file"]].append(entry)
+    for source_file, source_entries in grouped.items():
+        source_entries.sort(key=lambda item: int(item["diagram_number"]))
+    return dict(grouped)
 
 
 def read_mmd(repo_dir: Path, base_name: str) -> str:
     source = repo_dir / "diagrams" / "mermaid-source" / f"{base_name}.mmd"
     if not source.exists():
         raise FileNotFoundError(f"Missing Mermaid source: {source}")
-    return source.read_text(encoding="utf-8").strip()
+    body = source.read_text(encoding="utf-8").strip()
+    if not body.startswith(("flowchart", "graph", "sequenceDiagram", "classDiagram", "stateDiagram")):
+        raise ValueError(f"Mermaid source does not look like a Mermaid diagram: {source}")
+    return body
+
+
+def export_line_regex(base_name: str) -> re.Pattern[str]:
+    return re.compile(
+        r"> Diagram export: \[SVG\]\((?P<svg>[^)]*" + re.escape(base_name) + r"\.svg)\) "
+        r"\| \[PNG\]\((?P<png>[^)]*" + re.escape(base_name) + r"\.png)\)"
+    )
+
+
+def mermaid_block_with_export_regex(base_name: str) -> re.Pattern[str]:
+    return re.compile(
+        r"```mermaid\n(?P<body>.*?)\n```\s*\n"
+        r"> Diagram export: \[SVG\]\((?P<svg>[^)]*" + re.escape(base_name) + r"\.svg)\) "
+        r"\| \[PNG\]\((?P<png>[^)]*" + re.escape(base_name) + r"\.png)\)",
+        flags=re.DOTALL,
+    )
+
+
+def validate_markdown_bindings(repo_dir: Path, source_file: str, entries: list[dict], text: str) -> None:
+    mermaid_blocks = len(re.findall(r"```mermaid\n", text))
+    export_lines = len(re.findall(r"> Diagram export: \[SVG\]\(", text))
+    expected = len(entries)
+
+    if mermaid_blocks < expected:
+        raise ValueError(
+            f"{source_file} contains {mermaid_blocks} Mermaid block(s), but {expected} diagram(s) are indexed. "
+            "The document may be truncated or missing diagram blocks."
+        )
+    if export_lines < expected:
+        raise ValueError(
+            f"{source_file} contains {export_lines} Diagram export line(s), but {expected} diagram(s) are indexed. "
+            "Each indexed diagram must have one export line."
+        )
+
+    for entry in entries:
+        base_name = entry["base_name"]
+        matches = export_line_regex(base_name).findall(text)
+        if len(matches) != 1:
+            raise ValueError(
+                f"{source_file} must contain exactly one Diagram export line for {base_name}; found {len(matches)}."
+            )
+
+        block_matches = mermaid_block_with_export_regex(base_name).findall(text)
+        if len(block_matches) != 1:
+            raise ValueError(
+                f"{source_file} must contain exactly one Mermaid block immediately followed by the export line "
+                f"for {base_name}; found {len(block_matches)}."
+            )
 
 
 def sync_markdown_mermaid_blocks(repo_dir: Path, entries: list[dict]) -> list[str]:
     changed_files: list[str] = []
+    grouped = group_entries_by_source(entries)
 
-    for md_path in iter_markdown_files(repo_dir):
+    for source_file, source_entries in grouped.items():
+        md_path = repo_dir / source_file
+        if not md_path.exists():
+            raise FileNotFoundError(f"Indexed Markdown source file does not exist: {md_path}")
+
         original = md_path.read_text(encoding="utf-8")
+        validate_markdown_bindings(repo_dir, source_file, source_entries, original)
         updated = original
 
-        for entry in entries:
+        for entry in source_entries:
             base_name = entry["base_name"]
             source_body = read_mmd(repo_dir, base_name)
-
-            # Match a Mermaid block immediately associated with the matching
-            # export line. The export line is the binding contract that tells
-            # us which diagram number the preceding code block represents.
-            pattern = re.compile(
-                r"```mermaid\n(?P<body>.*?)\n```\s*\n> Diagram export: "
-                r"\[SVG\]\((?P<svg>[^)]*" + re.escape(base_name) + r"\.svg)\) "
-                r"\| \[PNG\]\((?P<png>[^)]*" + re.escape(base_name) + r"\.png)\)",
-                flags=re.DOTALL,
-            )
+            pattern = mermaid_block_with_export_regex(base_name)
 
             def repl(match: re.Match[str]) -> str:
                 return (
@@ -88,7 +146,9 @@ def sync_markdown_mermaid_blocks(repo_dir: Path, entries: list[dict]) -> list[st
                     + f"> Diagram export: [SVG]({match.group('svg')}) | [PNG]({match.group('png')})"
                 )
 
-            updated = pattern.sub(repl, updated)
+            updated, replacements = pattern.subn(repl, updated)
+            if replacements != 1:
+                raise RuntimeError(f"Expected one replacement for {base_name} in {source_file}; got {replacements}.")
 
         if updated != original:
             md_path.write_text(updated, encoding="utf-8")
@@ -105,13 +165,9 @@ def count_nodes_edges(mmd_text: str) -> tuple[int, int]:
         line = raw_line.strip()
         if not line or line.startswith("%%") or line.startswith("flowchart") or line.startswith("style"):
             continue
-        # Node declaration variants used in this repository:
-        #   NodeID["Label"]
-        #   NodeID{"Decision"}
         node_match = re.match(r"^([A-Za-z_][A-Za-z0-9_]*)\s*(?:\[|\{)", line)
         if node_match:
             node_ids.add(node_match.group(1))
-        # Mermaid edge variants used in this repository.
         if re.search(r"(-->|<-.+?->|-.+?->|==>|---)", line):
             edge_count += 1
 
@@ -127,10 +183,11 @@ def refresh_diagram_indexes(repo_dir: Path, entries: list[dict]) -> list[str]:
 
     for entry in entries:
         source_path = repo_dir / entry["mermaid_source"]
-        if source_path.exists():
-            nodes, edges = count_nodes_edges(source_path.read_text(encoding="utf-8"))
-            entry["nodes"] = nodes
-            entry["edges"] = edges
+        if not source_path.exists():
+            raise FileNotFoundError(f"Indexed Mermaid source does not exist: {source_path}")
+        nodes, edges = count_nodes_edges(source_path.read_text(encoding="utf-8"))
+        entry["nodes"] = nodes
+        entry["edges"] = edges
 
     updated_json = json.dumps(entries, indent=2) + "\n"
     if updated_json != original_json:
@@ -141,14 +198,13 @@ def refresh_diagram_indexes(repo_dir: Path, entries: list[dict]) -> list[str]:
     lines = [
         "# Diagram Export Index",
         "",
-        "The diagrams below were exported from Mermaid code blocks in the kubeharbor system design document.",
+        "The diagrams below are exported from Mermaid code blocks in the kubeharbor system design document.",
         "",
         "| Source file | Diagram | Mermaid source | SVG | PNG | Nodes | Edges |",
         "| --- | ---: | --- | --- | --- | ---: | ---: |",
     ]
     for entry in entries:
         base = entry["base_name"]
-        # DIAGRAM-INDEX.md lives in diagrams/, so links are relative to that folder.
         lines.append(
             f"| `{entry['source_file']}` | {entry['diagram_number']} | "
             f"[`{base}.mmd`](mermaid-source/{base}.mmd) | "
@@ -169,12 +225,15 @@ def main() -> int:
         print(f"ERROR: {repo_dir} does not look like a Git repository.", file=sys.stderr)
         return 2
 
-    entries = load_index_entries(repo_dir)
-    changed: list[str] = []
-    changed.extend(sync_markdown_mermaid_blocks(repo_dir, entries))
-    changed.extend(refresh_diagram_indexes(repo_dir, entries))
+    try:
+        entries = load_index_entries(repo_dir)
+        changed: list[str] = []
+        changed.extend(sync_markdown_mermaid_blocks(repo_dir, entries))
+        changed.extend(refresh_diagram_indexes(repo_dir, entries))
+    except Exception as exc:  # noqa: BLE001 - CLI script should print clean operator errors.
+        print(f"ERROR: diagram sync failed: {exc}", file=sys.stderr)
+        return 1
 
-    # Preserve order while removing duplicates.
     unique_changed = list(dict.fromkeys(changed))
     marker = repo_dir / ".diagram-sync-updated-files.txt"
     marker.write_text("\n".join(unique_changed) + ("\n" if unique_changed else ""), encoding="utf-8")
