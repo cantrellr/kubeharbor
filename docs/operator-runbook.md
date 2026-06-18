@@ -2,7 +2,7 @@
 
 ## Start/stop/status
 
-Harbor now starts with serial orchestration by default: `harbor-log` is started first, the local syslog listener on `127.0.0.1:1514` is validated, and then remaining services are started.
+Harbor starts with serial orchestration by default: `harbor-log` is started first, the local syslog listener on `127.0.0.1:1514` is validated, and then remaining services are started.
 
 ```bash
 sudo systemctl status harbor
@@ -40,7 +40,7 @@ What it does:
 - Optionally removes Harbor compose volumes when `--remove-volumes` is passed.
 - When `--remove-volumes` is passed, also removes `/data/database`.
 - Preserves local Docker image cache.
-- Preserves Harbor data under `/data`.
+- Preserves Harbor registry data under `/data` unless explicitly removed by a separate operator action.
 
 ## Validate API
 
@@ -48,27 +48,27 @@ What it does:
 curl -k https://kubeharbor.dev.kube/api/v2.0/ping
 ```
 
-## Preflight checks now enforced by installer
+## Preflight checks enforced by installer
 
-`sudo ./install.sh` now fails early when critical checks fail. Current enforced checks include:
+`sudo ./install.sh` fails early when critical checks fail. Current enforced checks include:
 
 - Required settings in `config/harbor.env` are empty.
 - Password placeholders remain or admin/DB passwords are shorter than 16 chars.
 - Harbor installer filename does not match `HARBOR_VERSION`.
 - `HARBOR_CONFIG_VERSION` does not match `HARBOR_VERSION` without `v` prefix.
 - SHA256 checksum mismatch in `installers/`, `images/`, or `packages/docker-debs/`.
-- TLS leaf cert/key mismatch, CA chain verification failure, or hostname mismatch in cert SAN/CN.
+- TLS leaf cert/key mismatch, CA chain verification failure, or cert hostname mismatch in cert SAN/CN.
 - `USE_DHI_HARBOR_PORTAL=true` with incompatible image-loading settings.
 
 If preflight fails, fix the reported item and rerun `sudo ./install.sh`.
 
 ## Disk formatting safety
 
-When `FORMAT_DATA_DISK=true`, installer safeguards now block formatting if:
+When `FORMAT_DATA_DISK=true`, installer safeguards block formatting if:
 
 - `DATA_DISK_DEVICE` is not a full disk device.
 - The selected disk appears to be the root OS disk.
-- Any partition on the selected disk is mounted.
+- Any partition on that disk is mounted.
 
 Always validate with `lsblk` before confirming the format prompt.
 
@@ -119,7 +119,7 @@ In a fully air-gapped environment, use an image already present on the staging c
 
 ## Verification behavior after install
 
-`scripts/10-verify.sh` now checks:
+`scripts/10-verify.sh` checks:
 
 - Required Harbor services are running.
 - HTTPS API ping with retries.
@@ -139,6 +139,32 @@ sudo ls -lah /var/log/harbor
 ```bash
 sudo ./scripts/09-backup-harbor.sh /backup
 ```
+
+## Documentation and diagram validation
+
+Run this after changing architecture documentation or Mermaid diagrams:
+
+```bash
+grep -c '```mermaid' docs/System-Design-Document.md
+grep -c 'Diagram export:' docs/System-Design-Document.md
+python3 diagrams/sync-mermaid-markdown.py .
+```
+
+Expected current counts:
+
+```text
+12 Mermaid blocks
+12 Diagram export lines
+```
+
+Full local render and sync:
+
+```bash
+./diagrams/apply-diagram-updates.sh . --install-deps --install-browser-deps
+./diagrams/apply-diagram-updates.sh .
+```
+
+Do not run the diagram wrapper with `sudo`.
 
 ## Common break/fix
 
@@ -170,6 +196,25 @@ sudo docker system df
 ```
 
 Do not blindly prune Docker on a production Harbor host. Validate what is safe first.
+
+### Diagram render fails with missing Chrome/Puppeteer libraries
+
+Install browser runtime dependencies and rerun the wrapper:
+
+```bash
+./diagrams/apply-diagram-updates.sh . --install-browser-deps
+./diagrams/apply-diagram-updates.sh .
+```
+
+### Diagram render cannot find `node`
+
+Install Node.js/npm or run as the normal user that owns the `nvm`/`asdf` environment:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y nodejs npm
+./diagrams/apply-diagram-updates.sh . --install-deps
+```
 
 ## Notes from first Internet-connected staging run
 
