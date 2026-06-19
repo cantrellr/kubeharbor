@@ -7,9 +7,40 @@ set -euo pipefail
 # and emits a single tarball to move into the air gap.
 
 BUNDLE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ENV_FILE="${ENV_FILE:-${BUNDLE_DIR}/config/harbor.env}"
+
+# Preserve caller-provided overrides before sourcing config/harbor.env. Without this,
+# a sudo VAR=value invocation can be overwritten by the env file and silently pull
+# the wrong DHI tag.
+CALLER_HARBOR_VERSION="${HARBOR_VERSION:-}"
+CALLER_DHI_HARBOR_PORTAL_IMAGE="${DHI_HARBOR_PORTAL_IMAGE:-}"
+CALLER_DHI_IMAGE="${DHI_IMAGE:-}"
+
+# The deployment config owns the portal image value. Source it here so the Internet-side
+# package builder pulls the same image the air-gapped installer will later require.
+if [[ -f "${ENV_FILE}" ]]; then
+  # shellcheck disable=SC1090
+  source "${ENV_FILE}"
+elif [[ -f "${BUNDLE_DIR}/config/example-harbor.env" ]]; then
+  # shellcheck disable=SC1090
+  source "${BUNDLE_DIR}/config/example-harbor.env"
+fi
+
+if [[ -n "${CALLER_HARBOR_VERSION}" ]]; then
+  HARBOR_VERSION="${CALLER_HARBOR_VERSION}"
+fi
 HARBOR_VERSION="${HARBOR_VERSION:-v2.15.1}"
-# Default to the runtime Docker Hardened Image tag. Use the -dev tag only for build/debug workflows.
-DHI_IMAGE="${DHI_IMAGE:-cantrellcloud/dhi-harbor-portal:2.15.1-debian}"
+
+# Image precedence:
+#   1. Caller DHI_HARBOR_PORTAL_IMAGE
+#   2. Caller legacy DHI_IMAGE
+#   3. config/harbor.env DHI_HARBOR_PORTAL_IMAGE
+#   4. config/harbor.env legacy DHI_IMAGE, if ever present
+#   5. Built-in current default
+resolved_dhi_image="${CALLER_DHI_HARBOR_PORTAL_IMAGE:-${CALLER_DHI_IMAGE:-${DHI_HARBOR_PORTAL_IMAGE:-${DHI_IMAGE:-cantrellcloud/dhi-harbor-portal:2.15.1-debian13}}}}"
+DHI_HARBOR_PORTAL_IMAGE="${resolved_dhi_image}"
+DHI_IMAGE="${resolved_dhi_image}" # Backwards-compatible alias for older wrapper commands/docs.
+
 DOWNLOAD_HARBOR="${DOWNLOAD_HARBOR:-true}"
 DOWNLOAD_DOCKER_DEBS="${DOWNLOAD_DOCKER_DEBS:-true}"
 DOWNLOAD_DHI_IMAGE="${DOWNLOAD_DHI_IMAGE:-true}"
@@ -117,7 +148,7 @@ if [[ "${DOWNLOAD_HARBOR}" == "true" ]]; then
 fi
 
 if [[ "${DOWNLOAD_DHI_IMAGE}" == "true" ]]; then
-  log "Docker login is required to pull the DHI image: ${DHI_IMAGE}"
+  log "Docker login is required to pull the DHI image: ${DHI_HARBOR_PORTAL_IMAGE}"
   if [[ -z "${DOCKER_USERNAME:-}" ]]; then
     read -r -p "Docker username: " DOCKER_USERNAME
   fi
@@ -139,14 +170,14 @@ if [[ "${DOWNLOAD_DHI_IMAGE}" == "true" ]]; then
   echo "${DOCKER_PASSWORD}" | docker login --username "${DOCKER_USERNAME}" --password-stdin
   unset DOCKER_PASSWORD
 
-  log "Pulling ${DHI_IMAGE}"
-  docker pull "${DHI_IMAGE}"
+  log "Pulling ${DHI_HARBOR_PORTAL_IMAGE}"
+  docker pull "${DHI_HARBOR_PORTAL_IMAGE}"
 
-  image_safe="$(echo "${DHI_IMAGE}" | tr '/:@' '___')"
+  image_safe="$(echo "${DHI_HARBOR_PORTAL_IMAGE}" | tr '/:@' '___')"
   image_tar="${BUNDLE_DIR}/images/${image_safe}.tar"
-  docker save "${DHI_IMAGE}" -o "${image_tar}"
-  docker image inspect "${DHI_IMAGE}" > "${BUNDLE_DIR}/images/${image_safe}.inspect.json"
-  echo "${DHI_IMAGE}" > "${BUNDLE_DIR}/images/DHI_IMAGE_REF.txt"
+  docker save "${DHI_HARBOR_PORTAL_IMAGE}" -o "${image_tar}"
+  docker image inspect "${DHI_HARBOR_PORTAL_IMAGE}" > "${BUNDLE_DIR}/images/${image_safe}.inspect.json"
+  echo "${DHI_HARBOR_PORTAL_IMAGE}" > "${BUNDLE_DIR}/images/DHI_IMAGE_REF.txt"
 fi
 
 # Checksums and artifact inventory.
@@ -165,7 +196,7 @@ kubeharbor air-gap artifact inventory
 Generated: $(date -Is)
 Target OS: Ubuntu 24.04 LTS amd64
 Harbor version: ${HARBOR_VERSION}
-DHI image: ${DHI_IMAGE}
+DHI image: ${DHI_HARBOR_PORTAL_IMAGE}
 
 Docker packages: packages/docker-debs/
 Harbor offline installer: installers/
@@ -180,7 +211,7 @@ if [[ "${GENERATE_SBOM}" == "true" ]]; then
     --output-dir "${BUNDLE_DIR}/sbom"
     --package-name "${PACKAGE_BASENAME}"
     --harbor-version "${HARBOR_VERSION}"
-    --dhi-image "${DHI_IMAGE}"
+    --dhi-image "${DHI_HARBOR_PORTAL_IMAGE}"
   )
   if [[ "${INSTALL_SYFT_FOR_SBOM}" == "true" ]]; then
     sbom_args+=(--install-syft)
