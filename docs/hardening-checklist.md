@@ -31,7 +31,7 @@
 - Use internal CA-signed TLS certificate with SAN for the Harbor FQDN.
 - Distribute only the CA certificate (`ca.crt`) to Harbor clients and nodes.
 - Change the default admin password before install.
-- Use the DHI Harbor portal runtime tag by default: `cantrellcloud/dhi-harbor-portal:2.15.1-debian`.
+- Use the DHI Harbor portal runtime tag by default: `cantrellcloud/dhi-harbor-portal:2.15.1-debian13`.
 - Do not use the `-dev` DHI tag for steady-state production-style deployment unless you are intentionally troubleshooting.
 - Disable self-registration unless there is a governance reason to allow it.
 - Create named users or integrate identity; avoid shared admin workflows.
