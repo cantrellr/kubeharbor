@@ -31,7 +31,7 @@ Options:
   --harbor-version VERSION    Harbor version included in the bundle.
   --dhi-image IMAGE           DHI image reference saved into the bundle.
   --install-syft              Install syft to /usr/local/bin if it is missing.
-  --require-syft              Fail if syft is unavailable after optional installation.
+  --require-syft              Fail if syft is unavailable or syft export generation fails.
   -h, --help                  Show this help.
 
 Outputs:
@@ -242,7 +242,7 @@ for path in sorted(repo.rglob("*")):
     if path.is_dir():
         continue
     if stat.S_ISREG(st.st_mode):
-        entry = {
+        files.append({
             "path": rel,
             "type": "file",
             "size_bytes": st.st_size,
@@ -250,8 +250,7 @@ for path in sorted(repo.rglob("*")):
             "sha256": sha(path, "sha256"),
             "sha1": sha(path, "sha1"),
             "category": category(rel),
-        }
-        files.append(entry)
+        })
     elif path.is_symlink():
         files.append({
             "path": rel,
@@ -477,21 +476,40 @@ summary.extend([
 (sbom_dir / "airgap-bundle-summary.txt").write_text("\n".join(summary) + "\n", encoding="utf-8")
 PY
 
-if command -v syft >/dev/null 2>&1; then
-  log "Generating optional syft SBOM exports"
-  syft_excludes=(
-    --exclude "${REPO_DIR}/.git"
-    --exclude "${REPO_DIR}/.docker"
-    --exclude "${REPO_DIR}/.diagram-tools"
-    --exclude "${REPO_DIR}/diagrams/node_modules"
-    --exclude "${REPO_DIR}/output"
-    --exclude "${REPO_DIR}/sbom"
-    --exclude "${REPO_DIR}/certs/*.key"
-    --exclude "${REPO_DIR}/certs/*.srl"
-    --exclude "${REPO_DIR}/certs/*.csr"
+run_syft_exports() {
+  # Current Syft versions reject absolute exclude paths for directory sources.
+  # Keep these relative to the dir: source root and prefix them with ./ per Syft's matcher contract.
+  local syft_excludes=(
+    --exclude './.git'
+    --exclude './.git/**'
+    --exclude './.docker'
+    --exclude './.docker/**'
+    --exclude './.diagram-tools'
+    --exclude './.diagram-tools/**'
+    --exclude './diagrams/node_modules'
+    --exclude './diagrams/node_modules/**'
+    --exclude './output'
+    --exclude './output/**'
+    --exclude './sbom'
+    --exclude './sbom/**'
+    --exclude './certs/*.key'
+    --exclude './certs/*.srl'
+    --exclude './certs/*.csr'
   )
+
   syft "dir:${REPO_DIR}" "${syft_excludes[@]}" -o "spdx-json=${SBOM_DIR}/syft-spdx.json"
   syft "dir:${REPO_DIR}" "${syft_excludes[@]}" -o "cyclonedx-json=${SBOM_DIR}/syft-cyclonedx.json"
+}
+
+if command -v syft >/dev/null 2>&1; then
+  log "Generating optional syft SBOM exports"
+  if ! run_syft_exports; then
+    if [[ "$REQUIRE_SYFT" == "true" ]]; then
+      err "syft SBOM export generation failed. Built-in SBOM files were generated, but --require-syft requires successful syft exports."
+    fi
+    warn "syft SBOM export generation failed. Continuing with built-in file-level SPDX/CycloneDX SBOMs."
+    rm -f "${SBOM_DIR}/syft-spdx.json" "${SBOM_DIR}/syft-cyclonedx.json"
+  fi
 else
   warn "syft not found. Built-in file-level SPDX/CycloneDX SBOMs were generated; install syft for richer package/component discovery."
 fi
