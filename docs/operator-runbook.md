@@ -102,7 +102,7 @@ sudo docker compose images portal
 Expected default DHI image:
 
 ```bash
-cantrellcloud/dhi-harbor-portal:2.15.1-debian
+cantrellcloud/dhi-harbor-portal:2.15.1-debian13
 ```
 
 When `USE_DHI_HARBOR_PORTAL=true`, the override script patches Harbor's generated portal `nginx.conf` for DHI's 8080/non-root runtime model, removes forced portal user overrides, validates the nginx config inside the DHI image, recreates only the portal service, and rolls back if the portal does not remain healthy.
