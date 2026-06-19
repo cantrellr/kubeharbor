@@ -20,6 +20,7 @@ sbom/*
 
 # TLS/private key material
 certs/*
+!certs/kubeharbor-dev-certs
 !certs/README.md
 
 # Generated moveable air-gap bundles

@@ -1,0 +1,7 @@
+/mnt/data/kubeharbor-dev-certs/kubeharbor.dev.local.crt: OK
+subject=C=US, ST=Florida, L=New Port Richey, O=DEV ONLY - KubeHarbor Test Certificate, OU=Local Development, CN=kubeharbor.dev.local
+issuer=C=US, ST=Florida, L=New Port Richey, O=DEV ONLY - KubeHarbor Test CA, OU=Local Development, CN=ca.dev.local
+notBefore=Jun 19 00:20:58 2026 GMT
+notAfter=Sep 21 00:20:58 2028 GMT
+X509v3 Subject Alternative Name: 
+    DNS:kubeharbor.dev.local, DNS:localhost, IP Address:127.0.0.1
