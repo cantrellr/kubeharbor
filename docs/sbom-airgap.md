@@ -72,7 +72,7 @@ bash tools/generate-airgap-sbom.sh \
   --repo . \
   --package-name test-kubeharbor-airgap \
   --harbor-version v2.15.1 \
-  --dhi-image cantrellcloud/dhi-harbor-portal:2.15.1-debian
+  --dhi-image cantrellcloud/dhi-harbor-portal:2.15.1-debian13
 ```
 
 To require Syft in this direct workflow:
@@ -82,7 +82,7 @@ sudo bash tools/generate-airgap-sbom.sh \
   --repo . \
   --package-name test-kubeharbor-airgap \
   --harbor-version v2.15.1 \
-  --dhi-image cantrellcloud/dhi-harbor-portal:2.15.1-debian \
+  --dhi-image cantrellcloud/dhi-harbor-portal:2.15.1-debian13 \
   --install-syft \
   --require-syft
 ```
