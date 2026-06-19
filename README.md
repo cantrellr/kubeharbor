@@ -30,14 +30,14 @@ This is viable for a small/internal air-gapped registry. It is **not** a high-av
 | Data disk | 500 GB mounted at `/data` |
 | Runtime | Docker Engine + Docker Compose plugin |
 | Harbor | v2.15.1 offline installer |
-| DHI portal image | `cantrellcloud/dhi-harbor-portal:2.15.1-debian` |
+| DHI portal image | `cantrellcloud/dhi-harbor-portal:2.15.1-debian13` |
 
 ## Recommended DHI image tag
 
 Use the runtime Docker Hardened Image tag that matches the Harbor version deployed by the offline installer:
 
 ```bash
-cantrellcloud/dhi-harbor-portal:2.15.1-debian
+cantrellcloud/dhi-harbor-portal:2.15.1-debian13
 ```
 
 Do not use the `-dev` variant as the default steady-state portal image. The `-dev` tag is intended for build/troubleshooting workflows and usually carries a larger runtime footprint. Use it only when you are intentionally debugging or validating hardened image behavior.
@@ -102,7 +102,7 @@ The script:
 2. Downloads Docker Engine, CLI, containerd, Buildx, Compose plugin, and dependency `.deb` files into `packages/docker-debs/`.
 3. Downloads the Harbor offline installer into `installers/`.
 4. Prompts for Docker username and password/access token when required.
-5. Runs `docker pull cantrellcloud/dhi-harbor-portal:2.15.1-debian` by default.
+5. Reads `DHI_HARBOR_PORTAL_IMAGE` from `config/harbor.env` and runs `docker pull cantrellcloud/dhi-harbor-portal:2.15.1-debian13` by default.
 6. Saves that image into `images/*.tar`.
 7. Generates SHA256 files for Docker packages, the Harbor installer, and saved image archives.
 8. Generates SBOM and provenance metadata under `sbom/`.
@@ -119,9 +119,11 @@ sudo INSTALL_SYFT_FOR_SBOM=true REQUIRE_SYFT_FOR_SBOM=true \
 To override the DHI tag for testing:
 
 ```bash
-sudo DHI_IMAGE="cantrellcloud/dhi-harbor-portal:2.15.1-debian-dev" \
+sudo DHI_HARBOR_PORTAL_IMAGE="cantrellcloud/dhi-harbor-portal:2.15.1-debian13-dev" \
   ./tools/download-airgap-artifacts-on-internet-host.sh
 ```
+
+`DHI_IMAGE` remains accepted as a legacy alias, but `DHI_HARBOR_PORTAL_IMAGE` is the source-of-truth variable used by both the downloader and the air-gapped installer.
 
 ## SBOM and transfer artifacts
 
@@ -200,7 +202,7 @@ By default, the bundle downloads, loads, and attempts to use the DHI Harbor port
 
 ```bash
 USE_DHI_HARBOR_PORTAL="true"
-DHI_HARBOR_PORTAL_IMAGE="cantrellcloud/dhi-harbor-portal:2.15.1-debian"
+DHI_HARBOR_PORTAL_IMAGE="cantrellcloud/dhi-harbor-portal:2.15.1-debian13"
 ```
 
 The official Harbor offline installer still deploys the complete Harbor stack first. Then the bundle swaps only the `portal` service to the DHI image. The override script patches Harbor's generated portal `nginx.conf` for DHI's 8080/non-root runtime model, validates the config inside the DHI image, recreates only the portal service, and rolls back if the portal does not remain healthy.
