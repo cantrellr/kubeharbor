@@ -32,7 +32,7 @@ This bundle deploys Harbor on a single Ubuntu 24.04 LTS VM named `kubeharbor` us
 | Data disk | 500 GB mounted at `/data` |
 | Runtime | Docker Engine + Docker Compose plugin |
 | Harbor | v2.15.1 offline installer |
-| DHI portal image | `cantrellcloud/dhi-harbor-portal:2.15.1-debian` |
+| DHI portal image | `cantrellcloud/dhi-harbor-portal:2.15.1-debian13` |
 
 This is viable for a small/internal air-gapped registry. It is not a high-availability design. Treat Harbor as a platform dependency: if it is down, Kubernetes lifecycle work gets painful quickly.
 
@@ -41,7 +41,7 @@ This is viable for a small/internal air-gapped registry. It is not a high-availa
 Use the runtime Docker Hardened Image tag for steady-state deployment:
 
 ```bash
-cantrellcloud/dhi-harbor-portal:2.15.1-debian
+cantrellcloud/dhi-harbor-portal:2.15.1-debian13
 ```
 
 The `-dev` tag is for build or troubleshooting workflows only. Do not use it as the default steady-state portal image unless you are intentionally debugging hardened image behavior.
