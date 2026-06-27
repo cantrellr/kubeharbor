@@ -19,7 +19,7 @@ sbom/*
 !sbom/README.md
 
 # TLS/private key material
-certs/*
+!certs/*
 !certs/kubeharbor-dev-certs
 !certs/README.md
 

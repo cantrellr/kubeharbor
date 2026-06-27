@@ -14,7 +14,6 @@ ASSUME_YES="false"
 DRY_RUN="false"
 PURGE_DOCKER_IMAGES="false"
 PURGE_DOCKER_AUTH="false"
-PRUNE_CONTAINERS="false"
 PURGE_CERTS="false"
 PURGE_TMP="true"
 
@@ -32,7 +31,6 @@ Default cleanup:
   - installers/harbor-offline-installer-*.tgz and release sidecars
   - installers/SHA256SUMS
   - images/*.tar, *.inspect.json, DHI_IMAGE_REF.txt, SHA256SUMS
-  - sbom/generated SBOM and provenance files, preserving sbom/README.md
   - ARTIFACTS.txt
   - /tmp/kubeharbor-docker-debs and /tmp/kubeharbor-docker-config.*
 
@@ -41,7 +39,6 @@ Options:
       --dry-run             Show what would be removed, but do not remove it.
       --purge-docker-images Remove the staged DHI image from the local Docker image cache if present.
       --purge-docker-auth   Remove Docker auth files left by older runs, including /root/.docker/config.json.
-      --prune-containers    Stop and remove all Docker containers on this host.
       --purge-certs         Remove certs/*.crt, certs/*.key, certs/*.pem, certs/*.csr, certs/*.srl.
       --no-tmp              Do not remove /tmp scratch directories.
   -h, --help                Show this help.
@@ -50,7 +47,6 @@ Examples:
   sudo ./tools/clean-airgap-downloads.sh --yes
   sudo ./tools/clean-airgap-downloads.sh --dry-run
   sudo ./tools/clean-airgap-downloads.sh --yes --purge-docker-images --purge-docker-auth
-  sudo ./tools/clean-airgap-downloads.sh --yes --prune-containers
 USAGE
 }
 
@@ -60,7 +56,6 @@ while [[ $# -gt 0 ]]; do
     --dry-run) DRY_RUN="true" ;;
     --purge-docker-images) PURGE_DOCKER_IMAGES="true" ;;
     --purge-docker-auth) PURGE_DOCKER_AUTH="true" ;;
-    --prune-containers) PRUNE_CONTAINERS="true" ;;
     --purge-certs) PURGE_CERTS="true" ;;
     --no-tmp) PURGE_TMP="false" ;;
     -h|--help) usage; exit 0 ;;
@@ -86,9 +81,8 @@ fi
 paths_to_remove=()
 add_glob() {
   local pattern="$1"
-  shopt -s nullglob
-  local matches=( $pattern )
-  shopt -u nullglob
+  local -a matches
+  mapfile -t matches < <(compgen -G "$pattern" 2>/dev/null || true)
   if [[ ${#matches[@]} -gt 0 ]]; then
     paths_to_remove+=("${matches[@]}")
   fi
@@ -119,10 +113,6 @@ add_glob "${BUNDLE_DIR}/images/*.inspect.json"
 add_path_if_exists "${BUNDLE_DIR}/images/DHI_IMAGE_REF.txt"
 add_path_if_exists "${BUNDLE_DIR}/images/SHA256SUMS"
 
-add_glob "${BUNDLE_DIR}/sbom/*.json"
-add_glob "${BUNDLE_DIR}/sbom/*.txt"
-add_path_if_exists "${BUNDLE_DIR}/sbom/SHA256SUMS"
-
 add_path_if_exists "${BUNDLE_DIR}/ARTIFACTS.txt"
 
 if [[ "${PURGE_CERTS}" == "true" ]]; then
@@ -144,7 +134,6 @@ Bundle directory:        ${BUNDLE_DIR}
 Dry run:                 ${DRY_RUN}
 Purge Docker images:     ${PURGE_DOCKER_IMAGES}
 Purge Docker auth:       ${PURGE_DOCKER_AUTH}
-Prune containers:        ${PRUNE_CONTAINERS}
 Purge cert files:        ${PURGE_CERTS}
 Purge temp directories:  ${PURGE_TMP}
 SUMMARY
@@ -173,12 +162,6 @@ if [[ "${PURGE_DOCKER_IMAGES}" == "true" ]]; then
   echo "  ${DHI_IMAGE_REF:-<not detected>}"
 fi
 
-if [[ "${PRUNE_CONTAINERS}" == "true" ]]; then
-  echo
-  echo "Docker containers selected for stop/remove:"
-  echo "  all containers on this host"
-fi
-
 if [[ "${DRY_RUN}" == "true" ]]; then
   log "Dry run complete. Nothing removed."
   exit 0
@@ -204,7 +187,6 @@ mkdir -p \
   "${BUNDLE_DIR}/packages/docker-debs" \
   "${BUNDLE_DIR}/installers" \
   "${BUNDLE_DIR}/images" \
-  "${BUNDLE_DIR}/sbom" \
   "${BUNDLE_DIR}/certs"
 
 if [[ "${PURGE_DOCKER_IMAGES}" == "true" ]]; then
@@ -225,20 +207,6 @@ if [[ "${PURGE_DOCKER_AUTH}" == "true" ]]; then
     user_home="$(getent passwd "${SUDO_USER}" | cut -d: -f6 || true)"
     if [[ -n "${user_home}" ]]; then
       rm -f "${user_home}/.docker/config.json"
-    fi
-  fi
-fi
-
-if [[ "${PRUNE_CONTAINERS}" == "true" ]]; then
-  if ! command -v docker >/dev/null 2>&1; then
-    warn "Docker CLI not found; skipping container prune."
-  else
-    mapfile -t container_ids < <(docker ps -aq)
-    if [[ ${#container_ids[@]} -eq 0 ]]; then
-      log "No Docker containers found to stop/remove."
-    else
-      log "Stopping and removing all Docker containers"
-      docker rm -f "${container_ids[@]}" >/dev/null 2>&1 || warn "One or more containers could not be removed."
     fi
   fi
 fi
